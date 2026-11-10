@@ -19,7 +19,7 @@
    - Renaming rooms: a Home Assistant service (rest_command, see the package).
    ========================================================================== */
 
-const VK_VERSION = "2.1.0";
+const VK_VERSION = "2.2.0";
 
 /* ---------- Icons (custom line icons) ---------- */
 const VK_ICONS = {
@@ -810,7 +810,7 @@ class VakuumCard extends HTMLElement {
     this._dockAct = dk ? { kind: dk } : null;
     this.$("stSub").textContent = hasErr ? "· " + err : this._dockAct && status === "docked" ? "· " + VK_DOCKACT[dk].short : status === "docked" ? (bl >= 100 ? "· fully charged" : "· charging") : "";
     this.$("homeSub").textContent = status === "docked" ? "At the dock" : "Charge & care";
-    this.$("rbGoto").hidden = !c.topic;
+    this.$("rbGoto").hidden = !c.topic || c.go_to === false;   // go_to: false for robots without GoToLocationCapability (e.g. J15)
     this.$("rbStation").hidden = !E.dock && !E.tanks.length && !E.empty;
     this.$("rbCare").hidden = !E.consumables.length;
     this.$("rbCam").hidden = !this._cams.length && !this._rcamUrl;
@@ -940,10 +940,20 @@ class VakuumCard extends HTMLElement {
     const tiles = [];
     if (E.empty || this._config.topic) tiles.push({ kind: "empty", icon: "bin", name: "Empty bin", sub: "Empty the dust bin",
       run: () => E.empty ? this._svc("button", "press", { entity_id: E.empty }, "Dock is emptying") : this._mqtt("AutoEmptyDockManualTriggerCapability/trigger", "PERFORM", "Dock is emptying") });
+    // Mop wash / dry: Valetudo offers these only over REST → rest_command from the package
+    const svcOk = n => { const [d, sv] = String(n).split("."); return !!h.services?.[d]?.[sv]; };
+    const dockCmd = (n, kind, label) => { const [d, sv] = n.split("."), act = this._dockAct?.kind === kind ? "stop" : "start";
+      return this._hass.callService(d, sv, { action: act }, undefined, false, d === "rest_command")
+        .then(r => { const code = r?.response?.status; if (code && code >= 400) throw new Error("robot answered with HTTP " + code + (code === 400 ? " (maybe not possible right now, e.g. robot not docked)" : ""));
+          this._toast(act === "stop" ? label + " stopped" : label + " started", "ok"); vkBuzz(10); })
+        .catch(e => this._toast(label + " failed: " + (e.message || e), "err")); };
+    const wash = this._config.mop_wash_service || "rest_command.vacuum_mop_wash", dry = this._config.mop_dry_service || "rest_command.vacuum_mop_dry";
+    if (svcOk(wash)) tiles.push({ kind: "wash", icon: "care", name: "Wash mops", sub: "Clean the mop pads now", run: () => dockCmd(wash, "wash", "Mop wash") });
+    if (svcOk(dry)) tiles.push({ kind: "dry", icon: "wind", name: "Dry mops", sub: "Start hot-air drying", run: () => dockCmd(dry, "dry", "Mop drying") });
     tiles.push({ icon: "home", name: "Back to dock", sub: "Charge & care", run: () => this._svc("vacuum", "return_to_base", {}, "Returning to dock") });
     const box = this.$("tiles"); box.innerHTML = "";
     for (const t of tiles) { const run = t.kind && this._dockAct?.kind === t.kind, b = document.createElement("button");
-      b.className = "tile" + (run ? " run" : ""); b.innerHTML = `<span class="ti">${vkIc(t.icon)}</span><span><b>${t.name}</b><small>${run ? "Running…" : t.sub}</small></span>`;
+      b.className = "tile" + (run ? " run" : ""); b.innerHTML = `<span class="ti">${vkIc(t.icon)}</span><span><b>${t.name}</b><small>${run ? (t.kind === "empty" ? "Running…" : "Running… · tap to stop") : t.sub}</small></span>`;
       b.addEventListener("click", t.run); box.appendChild(b); }
   }
   _renderCare(){
@@ -1008,13 +1018,18 @@ class VakuumCard extends HTMLElement {
       if (!this._driveOk()) { this._toast("Install the Valetudo Control integration for manual control", "err"); return; }
       if (this._cleaning) { this._toast("Pause or stop the cleaning first", "err"); return; }
       this._closeSheet(); this._setGoto(false);
-      D.on = true; D.enabled = false; this._stage.classList.add("driving"); this.$("rbDrive").setAttribute("aria-pressed", "true");
+      D.on = true; D.enabled = false; D.failed = false; this._stage.classList.add("driving"); this.$("rbDrive").setAttribute("aria-pressed", "true");
       this._renderSpeed(); this._drvStatus(); setTimeout(() => this._redraw(), 30);
       this._drvKeys = e => this._drvKey(e); window.addEventListener("keydown", this._drvKeys); window.addEventListener("keyup", this._drvKeys);
       this._drvVis = () => { if (document.hidden) this._drvRelease(); }; document.addEventListener("visibilitychange", this._drvVis);
       this._drvTimer = setInterval(() => this._drvTick(), 250);
       try { await this._hass.callService("valetudo_control", "set_manual_control_state", { enable: true });
-        if (D.on) { D.enabled = true; vkBuzz(15); this._drvStatus(); } }
+        // The integration does not report failures, so confirm via its "Manual Control" switch (if found)
+        const sw = this._driveSwitch(), t0 = Date.now();
+        while (D.on && sw && this._hass.states[sw]?.state !== "on" && Date.now() - t0 < 7000) await new Promise(r => setTimeout(r, 400));
+        if (!D.on) return;
+        if (sw && this._hass.states[sw]?.state !== "on") { D.failed = true; this._drvStatus(); return; }
+        D.enabled = true; D.failed = false; vkBuzz(15); this._drvStatus(); }
       catch (e) { this._toast("Could not enable manual control: " + (e.message || e), "err"); this._setDrive(false); }
     } else {
       this._drvRelease(); D.on = false; D.enabled = false; D.keys.clear();
@@ -1027,8 +1042,9 @@ class VakuumCard extends HTMLElement {
   }
   _drvStatus(){
     const D = this._drv, sw = this._driveSwitch(), st = sw && this._hass.states[sw]?.state;
-    const on = D.enabled || st === "on"; this.$("drive").classList.toggle("on", on);
-    this.$("dSt").textContent = on ? "Manual control on" : "Enabling manual control…";
+    const on = D.enabled; this.$("drive").classList.toggle("on", on);
+    this.$("dSt").textContent = on ? "Manual control on" : D.failed ? "Robot did not accept manual control" : "Enabling manual control…";
+    if (D.failed) this.$("dVal").textContent = sw ? `${sw} stayed off. Check the HA log for valetudo_control.` : "";
   }
   _renderSpeed(){
     const D = this._drv, levels = [[.35, "Slow"], [.65, "Normal"], [1, "Fast"]];
