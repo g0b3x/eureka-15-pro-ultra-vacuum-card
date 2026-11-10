@@ -1,6 +1,6 @@
 # Vacuum Card
 
-A Lovelace card for Valetudo robot vacuums (built for the Eureka J15 Pro Ultra): live map with 2D/3D view, room and zone cleaning, go-to, a water trail for mopped areas, dock animations, consumables, cameras (including the robot's own camera) and a room-name editor. Optimized for desktop, kiosk and phone. Fully local.
+A Lovelace card for Valetudo robot vacuums (built for the Eureka J15 Pro Ultra): live map with 2D/3D view, room and zone cleaning, go-to, a water trail for mopped areas, dock animations, consumables, cameras (including the robot's own camera), a room-name editor and a joystick for manual control (with the Valetudo Control integration). Optimized for desktop, kiosk and phone. Fully local.
 
 ![Desktop](images/desktop.png)
 ![3D view with zone](images/3d-zone.png)
@@ -20,7 +20,7 @@ entity: vacuum.valetudo_talltotalfalcon   # your Valetudo vacuum entity
 topic: valetudo/TallTotalFalcon     # Valetudo MQTT <topic prefix>/<identifier>
 ```
 
-Needs Valetudo with MQTT, Home Assistant Autodiscovery and "Provide map data" enabled. All options: `height`, `view_3d`, `theme`, `title`, `map`, `consumables`, `cameras`, `robot_camera`, `rename_service`, `entities` (see the full bundle's `dashboard-example.yaml`).
+Needs Valetudo with MQTT, Home Assistant Autodiscovery and "Provide map data" enabled. All options: `height`, `view_3d`, `theme`, `title`, `map`, `consumables`, `cameras`, `robot_camera`, `manual_control`, `rename_service`, `entities` (see the full bundle's `dashboard-example.yaml`).
 
 ### Renaming rooms
 

@@ -19,7 +19,7 @@
    - Renaming rooms: a Home Assistant service (rest_command, see the package).
    ========================================================================== */
 
-const VK_VERSION = "2.0.0";
+const VK_VERSION = "2.1.0";
 
 /* ---------- Icons (custom line icons) ---------- */
 const VK_ICONS = {
@@ -42,6 +42,7 @@ const VK_ICONS = {
   locate: '<path d="M12 4v2M12 18v2M4 12h2M18 12h2"/><circle cx="12" cy="12" r="5"/><path d="M19 5l-2 2M5 19l2-2"/>',
   camera: '<path d="M3.5 8.5h3.2l1.8-2.5h7l1.8 2.5h3.2v10.5h-17V8.5Z"/><circle cx="12" cy="13.5" r="3.6"/>',
   ext: '<path d="M14 4h6v6M20 4l-9 9"/><path d="M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/>',
+  pad: '<path d="M7 9h10a4 4 0 0 1 3.9 4.9l-.8 3.4a2 2 0 0 1-3.4.9L14.5 16h-5l-2.2 2.2a2 2 0 0 1-3.4-.9l-.8-3.4A4 4 0 0 1 7 9Z"/><path d="M8 12v2.5M6.75 13.25h2.5"/><circle cx="15.5" cy="12.5" r=".6"/><circle cx="17" cy="14" r=".6"/>',
   pencil: '<path d="M4 20h4L19 9l-4-4L4 16v4Z"/><path d="M13.5 6.5l4 4"/>',
 };
 const vkIc = n => `<svg class="i" viewBox="0 0 24 24" aria-hidden="true">${VK_ICONS[n] || ""}</svg>`;
@@ -308,6 +309,38 @@ canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block
 .cam .cn i { width: 7px; height: 7px; border-radius: 50%; background: var(--good); flex: none; }
 .cam.off .cn i { background: var(--muted); }
 .cam.off img { opacity: .35; filter: grayscale(1); }
+/* Manual control (joystick) */
+.drive { position: absolute; z-index: 7; left: 50%; bottom: 14px; transform: translateX(-50%); display: none; align-items: center; gap: 18px; padding: 14px 16px 14px 20px; border-radius: 28px; max-width: calc(100% - 20px); }
+.stage.driving .drive { display: flex; }
+.stage.driving .dock, .stage.driving .legend { display: none; }
+.drive .dcol { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.drive .dst { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; white-space: nowrap; }
+.drive .dst i { width: 8px; height: 8px; border-radius: 50%; background: var(--warn); flex: none; }
+.drive.on .dst i { background: var(--good); box-shadow: 0 0 0 4px color-mix(in srgb, var(--good) 25%, transparent); }
+.drive .dval { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.drive .seg { min-width: 190px; }
+.drive .dbtns { display: flex; gap: 8px; }
+.drive .dbtn { appearance: none; display: flex; align-items: center; gap: 6px; padding: 9px 12px; border-radius: 12px; border: 1px solid var(--stroke2); background: var(--stroke); color: var(--fg); font: inherit; font-size: 12.5px; font-weight: 500; cursor: pointer; }
+.drive .dbtn svg.i { width: 16px; height: 16px; }
+.drive .dbtn.stop { background: color-mix(in srgb, var(--bad) 22%, var(--stroke)); border-color: color-mix(in srgb, var(--bad) 45%, transparent); }
+.joy { position: relative; flex: none; width: 150px; height: 150px; border-radius: 50%; touch-action: none; cursor: grab; user-select: none; -webkit-user-select: none;
+  background: radial-gradient(circle at 50% 50%, transparent 0 30%, color-mix(in srgb, var(--fg) 6%, transparent) 31% 100%), var(--stroke); border: 1px solid var(--stroke2); }
+.joy::before, .joy::after { content: ""; position: absolute; left: 50%; top: 50%; background: var(--stroke2); transform: translate(-50%, -50%); }
+.joy::before { width: 1px; height: 78%; } .joy::after { width: 78%; height: 1px; }
+.joy .arw { position: absolute; color: var(--muted); font-size: 10px; line-height: 1; }
+.joy .knob { position: absolute; z-index: 1; left: 50%; top: 50%; width: 60px; height: 60px; margin: -30px 0 0 -30px; border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #fff, var(--a1) 45%, var(--a2)); box-shadow: 0 8px 22px rgba(0,0,0,.45), inset 0 -3px 8px rgba(0,0,0,.25); transition: transform .18s cubic-bezier(.2,.8,.2,1); }
+.joy.drag { cursor: grabbing; } .joy.drag .knob { transition: none; }
+.drive:not(.on) .joy { opacity: .45; pointer-events: none; }
+.stage[data-lay="phone"] .drive { bottom: 10px; gap: 14px; padding: 12px 12px 12px 14px; width: calc(100% - 20px); justify-content: space-between; }
+.stage[data-lay="phone"] .drive .seg { min-width: 0; }
+.stage[data-lay="phone"] .drive .dcol { flex: 1; }
+.stage[data-lay="phone"] .drive .dbtn { padding: 9px 10px; }
+.stage[data-lay="phone"] .drive #dDock span { display: none; }
+.stage[data-lay="phone"] .drive .dbtn.stop { flex: 1; justify-content: center; }
+.stage[data-lay="phone"] .joy { width: 136px; height: 136px; }
+.stage[data-lay="short"] .drive { bottom: 6px; padding: 10px 14px; }
+.stage[data-lay="short"] .joy { width: 120px; height: 120px; }
 .rcam { position: absolute; z-index: 25; inset: 10px; display: flex; flex-direction: column; border-radius: 20px; overflow: hidden; background: #000; border: 1px solid var(--stroke2); box-shadow: var(--shadow);
   opacity: 0; transform: scale(.97); pointer-events: none; transition: opacity .25s, transform .25s; }
 .rcam.open { opacity: 1; transform: none; pointer-events: auto; }
@@ -467,6 +500,7 @@ class VakuumCard extends HTMLElement {
     this._dv = { rot: 0, last: 0, parts: [] };
     this._zoom = { z: 1, tx: 0, ty: 0 }; this._lay = "wide"; this._pinch = null;
     this._editSeg = null; this._drafts = {}; this._pendNames = {};
+    this._drv = { on: false, enabled: false, v: 0, a: 0, x: 0, y: 0, last: { v: null, a: null, t: 0 }, busy: false, pend: false, spd: .65, keys: new Set() };
   }
   setConfig(config){
     if (!config || !config.entity || !String(config.entity).startsWith("vacuum.")) throw new Error("Please set 'entity' to a vacuum.* entity");
@@ -495,7 +529,7 @@ class VakuumCard extends HTMLElement {
     this._raf = requestAnimationFrame(loop);
     if (this._stage && !this._ro) { this._ro = new ResizeObserver(() => this._redraw()); this._ro.observe(this._stage); }
   }
-  disconnectedCallback(){ this.$("rcamFrame")?.removeAttribute("src"); clearInterval(this._timer); cancelAnimationFrame(this._raf); cancelAnimationFrame(this._dvRaf); this._ro?.disconnect(); this._ro = null; }
+  disconnectedCallback(){ if (this._drv?.on) this._setDrive(false); this.$("rcamFrame")?.removeAttribute("src"); clearInterval(this._timer); cancelAnimationFrame(this._raf); cancelAnimationFrame(this._dvRaf); this._ro?.disconnect(); this._ro = null; }
   $(id){ return this.shadowRoot.getElementById(id); }
 
   /* ---------- DOM ---------- */
@@ -528,6 +562,7 @@ class VakuumCard extends HTMLElement {
     <button class="rb deskonly" id="rbCare" title="Care">${vkIc("care")}<em>Care</em></button>
     <button class="rb" id="rbCam" title="Cameras" hidden>${vkIc("camera")}<em>Camera</em></button>
     <button class="rb" id="rbRooms" title="Rename rooms">${vkIc("pencil")}<em>Rooms</em></button>
+    <button class="rb" id="rbDrive" title="Manual control" hidden>${vkIc("pad")}<em>Drive</em></button>
     <button class="rb" id="rbLocate" title="Locate robot">${vkIc("locate")}<em>Locate</em></button>
   </nav>
   <div class="dock" id="dock">
@@ -544,6 +579,14 @@ class VakuumCard extends HTMLElement {
   <div class="rcam" id="rcam" aria-hidden="true"><header><b><i></i>Robot camera · live</b>
     <a id="rcamExt" target="_blank" rel="noopener" title="Open in a new tab">${vkIc("ext")}</a><button id="rcamX" aria-label="Close">${vkIc("close")}</button></header>
     <iframe id="rcamFrame" title="Robot camera" allow="fullscreen" referrerpolicy="no-referrer"></iframe><div class="hint" id="rcamHint" hidden></div></div>
+  <div class="drive glass ui" id="drive">
+    <div class="joy" id="joy" aria-label="Joystick: drag to drive"><span class="knob" id="knob"></span></div>
+    <div class="dcol">
+      <div><div class="dst"><i></i><span id="dSt">Enabling manual control…</span></div><div class="dval" id="dVal">Drag the stick · arrow keys / WASD</div></div>
+      <div class="seg" id="segSpd"></div>
+      <div class="dbtns"><button class="dbtn" id="dLoc" title="Beep">${vkIc("locate")}</button><button class="dbtn" id="dDock" title="Back to dock">${vkIc("home")}<span>Dock</span></button><button class="dbtn stop" id="dExit">${vkIc("close")}Exit</button></div>
+    </div>
+  </div>
   <div class="toasts" id="toasts"></div>
   <div class="scrim" id="scrim"></div>
   <aside class="sheet ui" id="sheet">
@@ -596,6 +639,11 @@ class VakuumCard extends HTMLElement {
     this.$("rbStation").addEventListener("click", () => this._openSheet("station"));
     this.$("rbCare").addEventListener("click", () => this._openSheet("care"));
     this.$("rbRooms").addEventListener("click", () => this._openSheet("rooms"));
+    this.$("rbDrive").addEventListener("click", () => this._setDrive(!this._drv.on));
+    this.$("dExit").addEventListener("click", () => this._setDrive(false));
+    this.$("dDock").addEventListener("click", async () => { await this._setDrive(false); this._svc("vacuum", "return_to_base", {}, "Returning to dock"); });
+    this.$("dLoc").addEventListener("click", () => this._hass.callService("valetudo_control", "play_sound", {}).catch(() => {}));
+    this._bindJoystick();
     // one camera → live view right away; several → overview with snapshots
     this.$("rbCam").addEventListener("click", () => {
       const n = this._cams.length + (this._rcamUrl ? 1 : 0);
@@ -766,6 +814,8 @@ class VakuumCard extends HTMLElement {
     this.$("rbStation").hidden = !E.dock && !E.tanks.length && !E.empty;
     this.$("rbCare").hidden = !E.consumables.length;
     this.$("rbCam").hidden = !this._cams.length && !this._rcamUrl;
+    this.$("rbDrive").hidden = !this._driveOk();
+    if (this._drv.on) this._drvStatus();
 
     this._renderClean(); this._renderStation(); this._renderCare(); this._renderActivity(); this._updateDock();
     if (wasCleaning !== this._cleaning) this._drawFx();
@@ -773,7 +823,7 @@ class VakuumCard extends HTMLElement {
   _tick(){
     if (this._sheet === "cams") this._renderCams();
     this._pollN++;
-    const busy = this._cleaning || ["returning", "paused"].includes(this._st.status) || this._dockAct;
+    const busy = this._drv.on || this._cleaning || ["returning", "paused"].includes(this._st.status) || this._dockAct;
     if (busy || this._pollN % 8 === 0) this._fetchMap();
   }
   async _fetchMap(){
@@ -946,6 +996,93 @@ class VakuumCard extends HTMLElement {
     setTimeout(() => this._redraw(), 30); setTimeout(() => this._redraw(), 420);
   }
 
+  /* ---------- Manual control (Valetudo Control integration: valetudo_control.*) ----------
+     Joystick math follows the integration's own card: x/y in -1…1, dead zone 0.15,
+     straight up/down = drive, sideways = turn on the spot, diagonal = drive in a curve. */
+  _driveOk(){ return !!this._hass?.services?.valetudo_control?.send_command; }
+  _driveSwitch(){ const h = this._hass, c = this._config.manual_control; if (c) return c;
+    return Object.keys(h?.states || {}).find(id => id.startsWith("switch.") && /manual_control$/.test(id)); }
+  async _setDrive(on){
+    const D = this._drv; if (on === D.on) return;
+    if (on) {
+      if (!this._driveOk()) { this._toast("Install the Valetudo Control integration for manual control", "err"); return; }
+      if (this._cleaning) { this._toast("Pause or stop the cleaning first", "err"); return; }
+      this._closeSheet(); this._setGoto(false);
+      D.on = true; D.enabled = false; this._stage.classList.add("driving"); this.$("rbDrive").setAttribute("aria-pressed", "true");
+      this._renderSpeed(); this._drvStatus(); setTimeout(() => this._redraw(), 30);
+      this._drvKeys = e => this._drvKey(e); window.addEventListener("keydown", this._drvKeys); window.addEventListener("keyup", this._drvKeys);
+      this._drvVis = () => { if (document.hidden) this._drvRelease(); }; document.addEventListener("visibilitychange", this._drvVis);
+      this._drvTimer = setInterval(() => this._drvTick(), 250);
+      try { await this._hass.callService("valetudo_control", "set_manual_control_state", { enable: true });
+        if (D.on) { D.enabled = true; vkBuzz(15); this._drvStatus(); } }
+      catch (e) { this._toast("Could not enable manual control: " + (e.message || e), "err"); this._setDrive(false); }
+    } else {
+      this._drvRelease(); D.on = false; D.enabled = false; D.keys.clear();
+      clearInterval(this._drvTimer); window.removeEventListener("keydown", this._drvKeys); window.removeEventListener("keyup", this._drvKeys);
+      document.removeEventListener("visibilitychange", this._drvVis);
+      this._stage.classList.remove("driving"); this.$("rbDrive").setAttribute("aria-pressed", "false"); setTimeout(() => this._redraw(), 30);
+      try { await this._hass.callService("valetudo_control", "send_command", { velocity: 0, angle: 0 }); } catch (_) {}
+      try { await this._hass.callService("valetudo_control", "set_manual_control_state", { enable: false }); } catch (_) {}
+    }
+  }
+  _drvStatus(){
+    const D = this._drv, sw = this._driveSwitch(), st = sw && this._hass.states[sw]?.state;
+    const on = D.enabled || st === "on"; this.$("drive").classList.toggle("on", on);
+    this.$("dSt").textContent = on ? "Manual control on" : "Enabling manual control…";
+  }
+  _renderSpeed(){
+    const D = this._drv, levels = [[.35, "Slow"], [.65, "Normal"], [1, "Fast"]];
+    this._segBtns(this.$("segSpd"), levels.map(l => l[0]), D.spd, p => { D.spd = p; this._renderSpeed(); this._drvCalc(D.x, D.y); }, p => levels.find(l => l[0] === p)[1]);
+    if (!levels.some(l => l[0] === D.spd)) { D.spd = .65; this._renderSpeed(); }
+  }
+  _drvCalc(x, y){
+    const D = this._drv, dz = .15, ax = Math.abs(x), ay = Math.abs(y), n = v => Math.min(1, Math.max(0, v - dz) / (1 - dz)), clamp = v => Math.max(-1, Math.min(1, v));
+    D.x = x; D.y = y;
+    if (ax < dz && ay < dz) { D.v = 0; D.a = 0; }
+    else if (ay > dz && ax < dz * 1.5) { D.v = clamp(n(ay) * D.spd * Math.sign(y)); D.a = 0; }
+    else if (ax > dz && ay < dz * 1.5) { D.v = 0; D.a = x > 0 ? 90 : -90; }
+    else { D.a = Math.atan2(y < 0 ? -x : x, y) * 180 / Math.PI; D.v = clamp(n(Math.hypot(x, y)) * D.spd * Math.sign(y)); }
+    this.$("dVal").textContent = D.v || D.a ? `${D.v >= 0 ? "Forward" : "Back"} ${Math.round(Math.abs(D.v) * 100)} % · ${D.a > 0 ? "right" : D.a < 0 ? "left" : "straight"} ${Math.round(Math.abs(D.a))}°` : "Drag the stick · arrow keys / WASD";
+    this._drvSend(false);
+  }
+  _drvSend(force){
+    const D = this._drv; if (!D.on || !D.enabled) return;
+    const v = Math.round((Math.abs(D.v) < .02 ? 0 : D.v) * 1000) / 1000, a = Math.round(D.a * 10) / 10, L = D.last, now = Date.now();
+    const changed = L.v === null || Math.abs(v - L.v) > .02 || Math.abs(a - L.a) > 3;
+    if (!force && !changed) return;
+    if (v === 0 && a === 0 && L.v === 0 && L.a === 0) return;      // already stopped
+    if (D.busy) { D.pend = true; return; }                          // one call at a time, latest value wins
+    D.busy = true; L.v = v; L.a = a; L.t = now;
+    this._hass.callService("valetudo_control", "send_command", { velocity: v, angle: a }).catch(() => {})
+      .finally(() => { D.busy = false; if (D.pend) { D.pend = false; this._drvSend(true); } });
+  }
+  _drvTick(){ const D = this._drv; if (D.v || D.a) this._drvSend(true); }    // keep-alive while moving (like the integration: every 250 ms)
+  _drvRelease(){
+    const D = this._drv; this._drvJoy = null; this.$("joy").classList.remove("drag"); this.$("knob").style.transform = "";
+    D.keys.clear(); this._drvCalc(0, 0); this._drvSend(true);
+  }
+  _bindJoystick(){
+    const J = this.$("joy"), K = this.$("knob");
+    const at = e => { const r = J.getBoundingClientRect(), R = r.width / 2; let dx = e.clientX - r.left - R, dy = e.clientY - r.top - R;
+      const d = Math.hypot(dx, dy), max = R - 22; if (d > max) { dx *= max / d; dy *= max / d; }
+      K.style.transform = `translate(${dx}px, ${dy}px)`; this._drvCalc(dx / max, -dy / max); };
+    J.addEventListener("pointerdown", e => { if (!this._drv.enabled) return; e.preventDefault(); this._drvJoy = e.pointerId;
+      try { J.setPointerCapture(e.pointerId); } catch (_) {} J.classList.add("drag"); vkBuzz(8); at(e); });
+    J.addEventListener("pointermove", e => { if (this._drvJoy === e.pointerId) at(e); });
+    const up = e => { if (this._drvJoy === e.pointerId) this._drvRelease(); };
+    J.addEventListener("pointerup", up); J.addEventListener("pointercancel", up); J.addEventListener("lostpointercapture", up);
+  }
+  _drvKey(e){
+    const D = this._drv, map = { ArrowUp: "u", KeyW: "u", ArrowDown: "d", KeyS: "d", ArrowLeft: "l", KeyA: "l", ArrowRight: "r", KeyD: "r" }, k = map[e.code];
+    if (!k || !D.enabled || e.target?.closest?.("input, textarea") || e.composedPath?.().some(n => n.tagName === "INPUT" || n.tagName === "TEXTAREA")) return;
+    e.preventDefault(); if (e.type === "keydown") D.keys.add(k); else D.keys.delete(k);
+    const x = (D.keys.has("r") ? 1 : 0) - (D.keys.has("l") ? 1 : 0), y = (D.keys.has("u") ? 1 : 0) - (D.keys.has("d") ? 1 : 0);
+    const max = this.$("joy").getBoundingClientRect().width / 2 - 22;
+    this.$("knob").style.transform = x || y ? `translate(${x * max * (y ? .71 : 1)}px, ${-y * max * (x ? .71 : 1)}px)` : "";
+    this._drvCalc(x, y);
+    if (!x && !y) this._drvSend(true);
+  }
+
   /* ---------- Cameras ---------- */
   _openRcam(){
     const u = this._rcamUrl, el = this.$("rcam"), fr = this.$("rcamFrame"), hint = this.$("rcamHint");
@@ -1040,7 +1177,7 @@ class VakuumCard extends HTMLElement {
     const top = this.$("top").getBoundingClientRect(), dock = this.$("dock").getBoundingClientRect(), railEl = this.$("rail"), rail = railEl.getBoundingClientRect(), railW = railEl.offsetWidth;
     const wide = r.width > 760, editing = this._sheet === "rooms", sheetR = editing ? this.$("sheet").getBoundingClientRect() : null;
     const drawer = this._sheet && wide ? 362 : editing && this._lay === "short" ? Math.max(0, r.right - sheetR.left) + 4 : 0;
-    let bottom = r.bottom - dock.top + 4; if (editing && this._lay === "phone") bottom = Math.max(bottom, r.bottom - sheetR.top + 8);
+    let bottom = r.bottom - (this._drv.on ? this.$("drive").getBoundingClientRect().top : dock.top) + 4; if (editing && this._lay === "phone") bottom = Math.max(bottom, r.bottom - sheetR.top + 8);
     const P = this._lay === "phone" ? { top: rail.bottom - r.top + 10, bottom, left: 10, right: 10 }
             : this._lay === "short" ? { top: Math.max(top.bottom, rail.bottom) - r.top + 8, bottom, left: 14, right: 14 + drawer }
             : { top: top.bottom - r.top + 14, bottom, left: wide ? 24 : 12, right: railW + (wide ? 32 : 20) + drawer };
