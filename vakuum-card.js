@@ -19,7 +19,7 @@
    - Renaming rooms: a Home Assistant service (rest_command, see the package).
    ========================================================================== */
 
-const VK_VERSION = "2.2.1";
+const VK_VERSION = "2.3.0";
 
 /* ---------- Icons (custom line icons) ---------- */
 const VK_ICONS = {
@@ -851,13 +851,16 @@ class VakuumCard extends HTMLElement {
   /* ---------- Commands ---------- */
   async _svc(domain, service, data, ok){
     try { await this._hass.callService(domain, service, Object.assign(domain === "vacuum" ? { entity_id: this._config.entity } : {}, data)); if (ok) this._toast(ok, "ok"); }
-    catch (e) { this._toast("Error: " + (e.message || e), "err"); }
+    catch (e) { const m = String(e.message || e.code || e);
+      this._toast(/unauthori[sz]ed/i.test(m) ? `Not allowed for this user (${domain}.${service}). Install the vacuum.yaml package or ask an admin.` : "Error: " + m, "err"); }
     setTimeout(() => this._fetchMap(), 800);
   }
   _mqtt(cap, payload, ok){
     if (!this._config.topic) { this._toast("Set “topic:” in the card for rooms, zones and go-to", "err"); return; }
     return this._svc("mqtt", "publish", { topic: `${this._config.topic}/${cap}/set`, payload: typeof payload === "string" ? payload : JSON.stringify(payload) }, ok);
   }
+  _scriptFor(opt, def){ const n = this._config[opt] || def; if (this._config[opt] === false) return null;
+    const [d, sv] = String(n).split("."); return d === "script" && this._hass?.services?.script?.[sv] ? n : null; }
   _select(id, option, ok){ return this._svc("select", "select_option", { entity_id: id, option }, ok); }
   _intent(){
     const st = this._st, n = st.selected.size;
@@ -866,11 +869,16 @@ class VakuumCard extends HTMLElement {
       this._mqtt("GoToLocationCapability/go", { coordinates: { x: Math.round(g.x), y: Math.round(g.y) } }, "Driving to the target"); } };
     if (st.mode === "rooms" && n) { const ids = [...st.selected];
       return { label: `Clean ${n} room${n > 1 ? "s" : ""}`, run: () => { st.selected.clear(); this._updateUI();
-        this._mqtt("MapSegmentationCapability/clean", { segment_ids: ids, iterations: st.iterations, customOrder: true }, `Cleaning ${n} room${n > 1 ? "s" : ""}`); } }; }
+        // via script if available: scripts work for non-admin users too (mqtt.publish may be refused for them)
+        const sc = this._scriptFor("clean_rooms_script", "script.vacuum_clean_rooms"), ok = `Cleaning ${n} room${n > 1 ? "s" : ""}`;
+        if (sc) this._svc("script", sc.split(".")[1], { segment_ids: ids, iterations: st.iterations }, ok);
+        else this._mqtt("MapSegmentationCapability/clean", { segment_ids: ids, iterations: st.iterations, customOrder: true }, ok); } }; }
     if (st.mode === "zone" && st.zone) { const z = this._normZone(st.zone), ps = this._model.pixelSize, R = Math.round;
       const pts = { pA: { x: R(z.x0 * ps), y: R(z.y0 * ps) }, pB: { x: R(z.x1 * ps), y: R(z.y0 * ps) }, pC: { x: R(z.x1 * ps), y: R(z.y1 * ps) }, pD: { x: R(z.x0 * ps), y: R(z.y1 * ps) } };
       return { label: "Clean zone", run: () => { st.zone = null; this._updateUI();
-        this._mqtt("ZoneCleaningCapability/start", { zones: [{ points: pts }], iterations: st.iterations }, "Zone cleaning started"); } }; }
+        const sc = this._scriptFor("clean_zone_script", "script.vacuum_clean_zone");
+        if (sc) this._svc("script", sc.split(".")[1], { x0: pts.pA.x, y0: pts.pA.y, x1: pts.pC.x, y1: pts.pC.y, iterations: st.iterations }, "Zone cleaning started");
+        else this._mqtt("ZoneCleaningCapability/start", { zones: [{ points: pts }], iterations: st.iterations }, "Zone cleaning started"); } }; }
     if (st.status === "paused") return { label: "Resume", run: () => this._svc("vacuum", "start", {}, "Resumed") };
     if (st.mode === "rooms") return { label: "Pick rooms", run: () => this._toast("Tap rooms on the map first") };
     if (st.mode === "zone") return { label: "Draw a zone", run: () => this._toast("Draw a zone on the map first") };
