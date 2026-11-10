@@ -1,26 +1,27 @@
 /* ==========================================================================
-   VAKUUM-KARTE — Home-Assistant-Lovelace-Karte für Valetudo-Saugroboter
-   (gebaut für den Eureka J15 Pro Ultra, funktioniert mit jedem Valetudo-Roboter)
+   VACUUM CARD — Home Assistant Lovelace card for Valetudo robot vacuums
+   (built for the Eureka J15 Pro Ultra, works with any Valetudo robot)
 
-   Einzeldatei, keine Abhängigkeiten.
-   Installation:  /config/www/vakuum-card/vakuum-card.js
-   Ressource:     /local/vakuum-card/vakuum-card.js   (Typ: JavaScript-Modul)
+   Single file, no dependencies.
+   Install:   /config/www/vakuum-card/vakuum-card.js
+   Resource:  /local/vakuum-card/vakuum-card.js   (type: JavaScript module)
 
-   Minimal-Konfiguration:
+   Minimal config:
      type: custom:vakuum-card
-     entity: vacuum.valetudo_j15            # Valetudo-Vacuum-Entität
-     topic: valetudo/J15ProUltra            # <Topic-Präfix>/<Identifier> aus Valetudo → MQTT
+     entity: vacuum.valetudo_talltotalfalcon   # Valetudo vacuum entity
+     topic: valetudo/TallTotalFalcon           # <topic prefix>/<identifier> from Valetudo → MQTT
 
-   Datenquellen:
-   - Karte: Valetudo-Kamera-Entität "Map data" (PNG mit eingebettetem zTXt-Chunk
-     = ValetudoMap-JSON). Wird automatisch am selben Gerät gefunden.
-   - Status, Akku, Presets, Station, Verbrauchsmaterial: Autodiscovery-Entitäten.
-   - Räume / Zone / Gehe zu: mqtt.publish an die Valetudo-Topics.
+   Data sources:
+   - Map: Valetudo camera entity "Map data" (PNG with an embedded zTXt chunk
+     = ValetudoMap JSON). Found automatically on the same device.
+   - State, battery, presets, dock, consumables: autodiscovery entities.
+   - Rooms / zone / go-to: mqtt.publish to the Valetudo topics.
+   - Renaming rooms: a Home Assistant service (rest_command, see the package).
    ========================================================================== */
 
-const VK_VERSION = "1.3.0";
+const VK_VERSION = "2.0.0";
 
-/* ---------- Icons (eigene Linien-Icons) ---------- */
+/* ---------- Icons (custom line icons) ---------- */
 const VK_ICONS = {
   logo: '<circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="9.2" r="2.2"/><path d="M7.5 15.2h9"/>',
   cube: '<path d="M12 3 4 7.5v9L12 21l8-4.5v-9L12 3Z"/><path d="M4 7.5 12 12l8-4.5M12 12v9"/>',
@@ -40,51 +41,52 @@ const VK_ICONS = {
   wrench: '<path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L4 17l3 3 5.3-5.3a4 4 0 0 0 5.4-5.4l-2.5 2.5-2.4-.5-.5-2.4 2.4-2.6Z"/>',
   locate: '<path d="M12 4v2M12 18v2M4 12h2M18 12h2"/><circle cx="12" cy="12" r="5"/><path d="M19 5l-2 2M5 19l2-2"/>',
   camera: '<path d="M3.5 8.5h3.2l1.8-2.5h7l1.8 2.5h3.2v10.5h-17V8.5Z"/><circle cx="12" cy="13.5" r="3.6"/>',
+  ext: '<path d="M14 4h6v6M20 4l-9 9"/><path d="M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/>',
   pencil: '<path d="M4 20h4L19 9l-4-4L4 16v4Z"/><path d="M13.5 6.5l4 4"/>',
 };
 const vkIc = n => `<svg class="i" viewBox="0 0 24 24" aria-hidden="true">${VK_ICONS[n] || ""}</svg>`;
 
-/* ---------- Texte ---------- */
-const VK_STATUS = { docked: "Angedockt", idle: "Bereit", cleaning: "Reinigt", returning: "Kehrt zurück", paused: "Pausiert",
-  error: "Fehler", unavailable: "Nicht erreichbar", unknown: "Unbekannt", on: "Aktiv", off: "Bereit" };
-const VK_FAN = { off: "Aus", min: "Min", low: "Leise", medium: "Standard", high: "Stark", max: "Max", turbo: "Turbo", custom: "Eigen" };
-const VK_WATER = { off: "Aus", min: "Min", low: "Gering", medium: "Mittel", high: "Hoch", max: "Max", custom: "Eigen" };
-const VK_OP = { vacuum_and_mop: "Saugen & Wischen", vacuum: "Nur Saugen", mop: "Nur Wischen", vacuum_then_mop: "Erst Saugen, dann Wischen" };
+/* ---------- Texts ---------- */
+const VK_STATUS = { docked: "Docked", idle: "Ready", cleaning: "Cleaning", returning: "Returning", paused: "Paused",
+  error: "Error", unavailable: "Unavailable", unknown: "Unknown", on: "Active", off: "Ready" };
+const VK_FAN = { off: "Off", min: "Min", low: "Quiet", medium: "Standard", high: "Strong", max: "Max", turbo: "Turbo", custom: "Custom" };
+const VK_WATER = { off: "Off", min: "Min", low: "Low", medium: "Medium", high: "High", max: "Max", custom: "Custom" };
+const VK_OP = { vacuum_and_mop: "Vacuum & mop", vacuum: "Vacuum only", mop: "Mop only", vacuum_then_mop: "Vacuum, then mop" };
 const VK_DOCKACT = {
-  wash: { title: "Mopps werden gewaschen", short: "Mopp-Wäsche", sub: "Heißwasser-Wäsche" },
-  dry: { title: "Mopps werden getrocknet", short: "Trocknung", sub: "Warmluft-Trocknung" },
-  empty: { title: "Staubbehälter wird abgesaugt", short: "Absaugen", sub: "Station saugt ab" } };
+  wash: { title: "Washing mop pads", short: "Mop wash", sub: "Hot-water wash" },
+  dry: { title: "Drying mop pads", short: "Drying", sub: "Warm-air drying" },
+  empty: { title: "Emptying the dust bin", short: "Emptying", sub: "Dock is emptying" } };
 /* Valetudo DockStatusStateAttribute: error, idle, pause, emptying, cleaning, drying */
 const VK_DOCKSTATUS = { cleaning: "wash", washing: "wash", drying: "dry", emptying: "empty" };
-const VK_DOCKVAL = { ok: ["Normal", ""], empty: ["Leer", "warn"], full: ["Voll", "warn"], missing: ["Fehlt", "bad"], unknown: ["Unbekannt", ""] };
+const VK_DOCKVAL = { ok: ["OK", ""], empty: ["Empty", "warn"], full: ["Full", "warn"], missing: ["Missing", "bad"], unknown: ["Unknown", ""] };
 const VK_NAMES = [
-  [/main.?brush|brush.?main|hauptb/i, "Hauptbürste"], [/side.?brush|brush.?side|seitenb/i, "Seitenbürste"],
-  [/filter/i, "Filter"], [/mop/i, "Wischmopps"], [/sensor/i, "Sensoren"], [/fresh.?water|clean.?water/i, "Frischwasser"],
-  [/waste.?water|dirty.?water/i, "Abwasser"], [/dust.?bag|dustbag|dustbin/i, "Staubbeutel"], [/detergent/i, "Reiniger"] ];
+  [/main.?brush|brush.?main|hauptb/i, "Main brush"], [/side.?brush|brush.?side|seitenb/i, "Side brush"],
+  [/filter/i, "Filter"], [/mop/i, "Mop pads"], [/sensor/i, "Sensors"], [/fresh.?water|clean.?water/i, "Fresh water"],
+  [/waste.?water|dirty.?water/i, "Waste water"], [/dust.?bag|dustbag|dustbin/i, "Dust bag"], [/detergent/i, "Detergent"] ];
 const vkEsc = v => String(v).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
-const VK_ROOM_SUGG = ["Wohnzimmer", "Küche", "Esszimmer", "Flur", "Diele", "Bad", "Gäste-WC", "Schlafzimmer", "Kinderzimmer", "Büro", "Arbeitszimmer", "Gästezimmer", "Abstellraum", "Hauswirtschaft", "Ankleide", "Wintergarten"];
-/* Valetudo liefert die Fahrt als mehrere Pfade. Midea „vendorPathType“: 100 = Reinigungsbahn, 80 = Wende,
-   0 / 30 / 50 = Fahrt ohne Reinigung (Anfahrt, Raumwechsel, Rückfahrt). Ohne Typ zählt alles als Reinigung. */
+const VK_ROOM_SUGG = ["Living room", "Kitchen", "Hallway", "Bathroom", "Bedroom", "Kids room", "Dining room", "Office", "Guest room", "Guest WC", "Entrance", "Storage room", "Utility room", "Laundry room", "Dressing room", "Balcony"];
+/* Valetudo sends the run as several paths. Midea "vendorPathType": 100 = cleaning lane, 80 = turn,
+   0 / 30 / 50 = travel without cleaning (approach, room change, return). Without a type everything counts as cleaning. */
 const VK_TRAVEL = new Set([0, 30, 50]);
 function vkSplitPaths(ents){ const clean = [], travel = [];
   for (const e of ents) if (e.type === "path" && e.points.length >= 4) { const t = e.metaData?.vendorPathType; (t !== undefined && VK_TRAVEL.has(t) ? travel : clean).push(e.points); }
   return { clean, travel }; }
 const VK_SEG_COLORS = ["#7a63f2", "#38b8c8", "#5b8cff", "#c08cf5", "#f0a35c", "#45c48a", "#ec7aa0", "#8fd0ff"];
-const vkNf0 = new Intl.NumberFormat("de-DE", { maximumFractionDigits: 0 });
-const vkNf1 = new Intl.NumberFormat("de-DE", { maximumFractionDigits: 1 });
+const vkNf0 = new Intl.NumberFormat("en-GB", { maximumFractionDigits: 0 });
+const vkNf1 = new Intl.NumberFormat("en-GB", { maximumFractionDigits: 1 });
 const vkDur = s => Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0");
-const vkBuzz = ms => { try { navigator.vibrate && navigator.vibrate(ms); } catch (e) {} };   // leichtes haptisches Feedback (Android)
+const vkBuzz = ms => { try { navigator.vibrate && navigator.vibrate(ms); } catch (e) {} };   // light haptic feedback (Android)
 
-/* ---------- Hilfen ---------- */
+/* ---------- Helpers ---------- */
 function vkHexA(hex, a){ hex = (hex || "").trim(); if (hex[0] === "#" && hex.length >= 7) { const n = parseInt(hex.slice(1, 7), 16); return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`; } return hex; }
 async function vkInflate(u8){
   const s = new Blob([u8]).stream().pipeThrough(new DecompressionStream("deflate"));
   return await new Response(s).text();
 }
-/* Valetudo bettet die ValetudoMap als zTXt-Chunk in das PNG der Kamera-Entität ein */
+/* Valetudo embeds the ValetudoMap as a zTXt chunk in the camera entity's PNG */
 async function vkExtractMap(buf){
   const dv = new DataView(buf), u8 = new Uint8Array(buf);
-  if (u8[0] !== 0x89 || u8[1] !== 0x50) throw new Error("Kein PNG");
+  if (u8[0] !== 0x89 || u8[1] !== 0x50) throw new Error("Not a PNG");
   let o = 8;
   while (o + 8 <= dv.byteLength) {
     const len = dv.getUint32(o), type = String.fromCharCode(u8[o + 4], u8[o + 5], u8[o + 6], u8[o + 7]);
@@ -114,7 +116,7 @@ function vkParseMap(m){
       for (let i = 0; i < cp.length; i += 3) { p.rect(cp[i], cp[i + 1], cp[i + 2], 1); basePath.rect(cp[i], cp[i + 1], cp[i + 2], 1); }
     } else if (l.type === "segment") {
       const id = String(l.metaData?.segmentId ?? ("seg" + segments.length));
-      const seg = { id, name: l.metaData?.name || ("Raum " + id), named: !!l.metaData?.name, color: VK_SEG_COLORS[ci++ % VK_SEG_COLORS.length], path: new Path2D(), n: 0 };
+      const seg = { id, name: l.metaData?.name || ("Room " + id), named: !!l.metaData?.name, color: VK_SEG_COLORS[ci++ % VK_SEG_COLORS.length], path: new Path2D(), n: 0 };
       const slot = segments.length + 1; let sx = 0, sy = 0;
       for (let i = 0; i < cp.length; i += 3) { const x = cp[i], y = cp[i + 1], c = cp[i + 2];
         seg.path.rect(x, y, c, 1); basePath.rect(x, y, c, 1); sx += (x + c / 2) * c; sy += (y + .5) * c; seg.n += c;
@@ -306,6 +308,18 @@ canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block
 .cam .cn i { width: 7px; height: 7px; border-radius: 50%; background: var(--good); flex: none; }
 .cam.off .cn i { background: var(--muted); }
 .cam.off img { opacity: .35; filter: grayscale(1); }
+.rcam { position: absolute; z-index: 25; inset: 10px; display: flex; flex-direction: column; border-radius: 20px; overflow: hidden; background: #000; border: 1px solid var(--stroke2); box-shadow: var(--shadow);
+  opacity: 0; transform: scale(.97); pointer-events: none; transition: opacity .25s, transform .25s; }
+.rcam.open { opacity: 1; transform: none; pointer-events: auto; }
+.rcam header { display: flex; align-items: center; gap: 10px; padding: 10px 10px 10px 16px; background: var(--glass-hi); color: var(--fg); }
+.rcam header b { flex: 1; font-size: 14px; display: flex; align-items: center; gap: 8px; }
+.rcam header b i { width: 8px; height: 8px; border-radius: 50%; background: var(--bad); animation: vkrec 1.4s infinite; }
+@keyframes vkrec { 50% { opacity: .25; } }
+.rcam header a, .rcam header button { appearance: none; width: 34px; height: 34px; border-radius: 50%; border: 1px solid var(--stroke2); background: transparent; color: var(--fg); cursor: pointer; display: grid; place-items: center; }
+.rcam iframe { flex: 1; width: 100%; border: 0; background: #000; }
+.rcam .hint { flex: 1; display: grid; place-items: center; padding: 24px; text-align: center; color: #c9cfe2; font-size: 13px; line-height: 1.55; }
+.cam.robot { background: radial-gradient(120% 120% at 30% 20%, color-mix(in srgb, var(--a2) 45%, #000), #05070d); }
+.cam.robot .ph { color: #fff; font-weight: 600; gap: 4px; }
 .cam .ph { position: absolute; inset: 0; display: grid; place-items: center; color: var(--muted); font-size: 11.5px; }
 .tile { appearance: none; border: 1px solid var(--stroke); border-radius: 17px; padding: 14px; min-height: 100px; background: var(--stroke); color: var(--fg); cursor: pointer; text-align: left; display: flex; flex-direction: column; justify-content: space-between; gap: 12px; }
 .tile:hover:not(:disabled) { border-color: var(--a1); } .tile:disabled { opacity: .45; cursor: not-allowed; }
@@ -336,7 +350,7 @@ canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block
   .stage.drawer .rail { right: 376px; }
   .stage.drawer .top { padding-right: 376px; }
 }
-/* ---------- Mobil: Layout per data-lay (phone = schmale Karte, short = flach/Querformat) ---------- */
+/* ---------- Mobile: layout via data-lay (phone = narrow card, short = low/landscape) ---------- */
 .stage, .stage button { -webkit-tap-highlight-color: transparent; }
 .stage { -webkit-user-select: none; user-select: none; }
 .stage.zoomed { touch-action: none; }
@@ -344,7 +358,7 @@ canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block
 .sh-head, .shtabs { flex: none; }
 .shtabs { overflow-x: auto; scrollbar-width: none; }
 .shtabs::-webkit-scrollbar { display: none; }
-/* Räume-Editor */
+/* Room editor */
 .rnlist { display: flex; flex-direction: column; gap: 8px; }
 .rn { display: flex; align-items: center; gap: 11px; padding: 9px 9px 9px 13px; border-radius: 14px; background: var(--stroke); border: 1px solid transparent; transition: border-color .15s, background .15s; }
 .rn.on { border-color: var(--a1); background: color-mix(in srgb, var(--a1) 12%, var(--stroke)); }
@@ -389,7 +403,7 @@ canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block
 .stage[data-lay="phone"] .stat span, .stage[data-lay="short"] .stat span { font-size: 8.5px; margin-top: 5px; letter-spacing: .06em; }
 .stage[data-lay="phone"] .rail, .stage[data-lay="short"] .rail { top: var(--rail-top, 80px); bottom: auto; right: 10px; transform: none; flex-direction: row; gap: 2px; padding: 4px; border-radius: 999px; }
 .stage[data-lay="short"] .rail { top: 10px; }
-/* Breit: Leiste zwischen Kopfzeile und Bedienfeld; bei vielen Knöpfen ohne Beschriftung */
+/* Wide: rail between header and controls; drops labels when there are many buttons */
 .stage[data-lay="wide"] .rail { top: var(--rail-y, 50%); transform: none; }
 .stage.railc .rb em { display: none; }
 .stage.railc .rb { padding: 10px 0; }
@@ -437,7 +451,7 @@ canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block
 @media (prefers-reduced-motion: reduce) { *, *::before { animation: none !important; transition: none !important; } }
 `;
 
-/* ---------- Karte ---------- */
+/* ---------- Card ---------- */
 class VakuumCard extends HTMLElement {
   static getStubConfig(hass){
     const v = Object.keys(hass?.states || {}).find(e => e.startsWith("vacuum."));
@@ -455,11 +469,13 @@ class VakuumCard extends HTMLElement {
     this._editSeg = null; this._drafts = {}; this._pendNames = {};
   }
   setConfig(config){
-    if (!config || !config.entity || !String(config.entity).startsWith("vacuum.")) throw new Error("Bitte 'entity' mit einer vacuum.*-Entität angeben");
-    // Standardhöhe passt sich dem Bildschirm an (Handy ≈ volle Höhe, Desktop max. 680 px)
+    if (!config || !config.entity || !String(config.entity).startsWith("vacuum.")) throw new Error("Please set 'entity' to a vacuum.* entity");
+    // default height follows the screen (phone ≈ full height, desktop max. 680 px)
     this._config = Object.assign({ height: "clamp(460px, calc(100vh - 140px), 680px)", view_3d: false, theme: "auto" }, config);
     this._config.topic = (this._config.topic || "").replace(/\/+$/, "");
     const cams = this._config.cameras ? [].concat(this._config.cameras) : [];
+    const rc = String(this._config.robot_camera || "").trim().replace(/\/+$/, "");
+    this._rcamUrl = !rc ? "" : rc.includes("#") ? rc : (/^https?:\/\//.test(rc) ? rc : "http://" + rc) + "/#/robot/camera";
     this._cams = cams.map(c => typeof c === "string" ? { entity: c } : c).filter(c => c && String(c.entity || "").startsWith("camera."));
     this._ent = null; this._sig = null;
     if (!this._built) this._build();
@@ -479,7 +495,7 @@ class VakuumCard extends HTMLElement {
     this._raf = requestAnimationFrame(loop);
     if (this._stage && !this._ro) { this._ro = new ResizeObserver(() => this._redraw()); this._ro.observe(this._stage); }
   }
-  disconnectedCallback(){ clearInterval(this._timer); cancelAnimationFrame(this._raf); cancelAnimationFrame(this._dvRaf); this._ro?.disconnect(); this._ro = null; }
+  disconnectedCallback(){ this.$("rcamFrame")?.removeAttribute("src"); clearInterval(this._timer); cancelAnimationFrame(this._raf); cancelAnimationFrame(this._dvRaf); this._ro?.disconnect(); this._ro = null; }
   $(id){ return this.shadowRoot.getElementById(id); }
 
   /* ---------- DOM ---------- */
@@ -490,68 +506,71 @@ class VakuumCard extends HTMLElement {
   <div class="aurora"><i></i><i></i></div>
   <canvas id="cvBase"></canvas><canvas id="cvFx"></canvas>
   <div class="fade"></div>
-  <div class="nomap" id="nomap">Karte wird geladen…</div>
-  <div class="legend glass" id="legend" hidden><span id="lgVac"><i class="l1"></i>Gesaugt</span><span id="lgMop"><i class="l2"></i>Gewischt</span><span id="lgTravel"><i class="l3"></i>Fahrweg</span><span id="lgCarpet"><i class="l4"></i>Teppich</span></div>
+  <div class="nomap" id="nomap">Loading map…</div>
+  <div class="legend glass" id="legend" hidden><span id="lgVac"><i class="l1"></i>Vacuumed</span><span id="lgMop"><i class="l2"></i>Mopped</span><span id="lgTravel"><i class="l3"></i>Travel</span><span id="lgCarpet"><i class="l4"></i>Carpet</span></div>
   <div class="top" id="top">
     <div class="lcol">
       <div class="hdr glass ui"><span class="logo">${vkIc("logo")}</span>
-        <div style="min-width:0"><b class="n" id="name">Saugroboter</b><div class="hst"><span class="sdot" id="sdot"></span><b id="stText">—</b><span id="stSub"></span></div></div></div>
+        <div style="min-width:0"><b class="n" id="name">Robot vacuum</b><div class="hst"><span class="sdot" id="sdot"></span><b id="stText">—</b><span id="stSub"></span></div></div></div>
       <button class="activity glass ui" id="activity" hidden></button>
     </div>
     <div class="stats glass ui" id="stats">
-      <div class="stat"><b id="sArea">—</b><span>Fläche</span></div>
-      <div class="stat"><b id="sTime">—</b><span>Zeit</span></div>
-      <div class="stat"><b id="sBatt">—</b><span id="sBattL">Akku</span></div>
+      <div class="stat"><b id="sArea">—</b><span>Area</span></div>
+      <div class="stat"><b id="sTime">—</b><span>Time</span></div>
+      <div class="stat"><b id="sBatt">—</b><span id="sBattL">Battery</span></div>
     </div>
   </div>
   <nav class="rail glass ui" id="rail">
-    <button class="rb" id="rb3d" title="2D/3D-Ansicht"></button>
-    <button class="rb" id="rbGoto" title="Gehe zu Punkt">${vkIc("target")}<em>Gehe zu</em></button>
-    <button class="rb" id="rbFit" title="Ansicht zurücksetzen" hidden>${vkIc("fit")}<em>Ganz</em></button>
-    <button class="rb deskonly" id="rbStation" title="Station">${vkIc("station")}<em>Station</em></button>
-    <button class="rb deskonly" id="rbCare" title="Pflege">${vkIc("care")}<em>Pflege</em></button>
-    <button class="rb" id="rbCam" title="Kameras" hidden>${vkIc("camera")}<em>Kamera</em></button>
-    <button class="rb" id="rbRooms" title="Räume benennen">${vkIc("pencil")}<em>Räume</em></button>
-    <button class="rb" id="rbLocate" title="Roboter orten">${vkIc("locate")}<em>Orten</em></button>
+    <button class="rb" id="rb3d" title="2D/3D view"></button>
+    <button class="rb" id="rbGoto" title="Go to a point">${vkIc("target")}<em>Go to</em></button>
+    <button class="rb" id="rbFit" title="Reset view" hidden>${vkIc("fit")}<em>Fit</em></button>
+    <button class="rb deskonly" id="rbStation" title="Dock">${vkIc("station")}<em>Dock</em></button>
+    <button class="rb deskonly" id="rbCare" title="Care">${vkIc("care")}<em>Care</em></button>
+    <button class="rb" id="rbCam" title="Cameras" hidden>${vkIc("camera")}<em>Camera</em></button>
+    <button class="rb" id="rbRooms" title="Rename rooms">${vkIc("pencil")}<em>Rooms</em></button>
+    <button class="rb" id="rbLocate" title="Locate robot">${vkIc("locate")}<em>Locate</em></button>
   </nav>
   <div class="dock" id="dock">
     <div class="ctx ui" id="ctx"></div>
     <div class="tabs ui" id="tabs">
-      <button data-mode="rooms" aria-pressed="true">Räume</button><button data-mode="full" aria-pressed="false">Komplett</button><button data-mode="zone" aria-pressed="false">Zone</button>
+      <button data-mode="rooms" aria-pressed="true">Rooms</button><button data-mode="full" aria-pressed="false">All</button><button data-mode="zone" aria-pressed="false">Zone</button>
     </div>
     <div class="controls ui">
-      <button class="side" id="bOpt" title="Reinigungs-Optionen"><span class="slbl r"><b id="optTop">Optionen</b><small id="optSub"></small></span><span class="sic glass">${vkIc("sliders")}</span></button>
+      <button class="side" id="bOpt" title="Cleaning options"><span class="slbl r"><b id="optTop">Options</b><small id="optSub"></small></span><span class="sic glass">${vkIc("sliders")}</span></button>
       <div class="orbwrap"><button class="orb" id="bPlay"></button><span class="badge" id="badge" hidden></span><button class="ministop glass" id="bStop" title="Stopp" hidden>${vkIc("stop")}</button></div>
-      <button class="side right" id="bHome" title="Zur Station"><span class="sic glass">${vkIc("home")}</span><span class="slbl"><b>Zur Station</b><small id="homeSub">Laden &amp; Pflege</small></span></button>
+      <button class="side right" id="bHome" title="Back to dock"><span class="sic glass">${vkIc("home")}</span><span class="slbl"><b>Back to dock</b><small id="homeSub">Charge &amp; care</small></span></button>
     </div>
   </div>
+  <div class="rcam" id="rcam" aria-hidden="true"><header><b><i></i>Robot camera · live</b>
+    <a id="rcamExt" target="_blank" rel="noopener" title="Open in a new tab">${vkIc("ext")}</a><button id="rcamX" aria-label="Close">${vkIc("close")}</button></header>
+    <iframe id="rcamFrame" title="Robot camera" allow="fullscreen" referrerpolicy="no-referrer"></iframe><div class="hint" id="rcamHint" hidden></div></div>
   <div class="toasts" id="toasts"></div>
   <div class="scrim" id="scrim"></div>
   <aside class="sheet ui" id="sheet">
-    <header class="sh-head"><h3 id="shTitle"></h3><button class="x" id="shClose" aria-label="Schließen">${vkIc("close")}</button></header>
-    <div class="shtabs" id="shTabs"><button data-sec="clean">Reinigung</button><button data-sec="station">Station</button><button data-sec="care">Pflege</button><button data-sec="rooms">Räume</button><button data-sec="cams">Kameras</button></div>
+    <header class="sh-head"><h3 id="shTitle"></h3><button class="x" id="shClose" aria-label="Close">${vkIc("close")}</button></header>
+    <div class="shtabs" id="shTabs"><button data-sec="clean">Cleaning</button><button data-sec="station">Dock</button><button data-sec="care">Care</button><button data-sec="rooms">Rooms</button><button data-sec="cams">Cameras</button></div>
     <div class="sh-body">
       <section data-sec="clean">
-        <div id="gOp" hidden><p class="lbl">Betriebsart</p><div class="seg" id="segOp"></div></div>
-        <div id="gFan" hidden><p class="lbl">Saugkraft <span class="val" id="vFan"></span></p><div class="seg" id="segFan"></div></div>
-        <div id="gWater" hidden><p class="lbl">Wassermenge <span class="val" id="vWater"></span></p><div class="seg" id="segWater"></div></div>
-        <div><p class="lbl">Durchgänge</p><div class="seg" id="segIt"></div></div>
-        <button class="cta" id="cta">Komplett reinigen</button>
+        <div id="gOp" hidden><p class="lbl">Mode</p><div class="seg" id="segOp"></div></div>
+        <div id="gFan" hidden><p class="lbl">Suction <span class="val" id="vFan"></span></p><div class="seg" id="segFan"></div></div>
+        <div id="gWater" hidden><p class="lbl">Water flow <span class="val" id="vWater"></span></p><div class="seg" id="segWater"></div></div>
+        <div><p class="lbl">Passes</p><div class="seg" id="segIt"></div></div>
+        <button class="cta" id="cta">Clean everything</button>
       </section>
       <section data-sec="station">
         <div class="dockviz"><canvas id="cvDock"></canvas>
-          <div class="dv-cap"><div><b id="dvT">Station bereit</b><small id="dvS">Mopps sauber und trocken</small></div></div>
+          <div class="dv-cap"><div><b id="dvT">Dock ready</b><small id="dvS">Mop pads clean and dry</small></div></div>
           <div class="dv-bar" id="dvBar" hidden><i></i></div></div>
-        <div id="gTanks"><p class="lbl">Behälter</p><div class="tanks" id="tanks"></div></div>
-        <div><p class="lbl">Aktionen</p><div class="tiles" id="tiles"></div></div>
+        <div id="gTanks"><p class="lbl">Tanks</p><div class="tanks" id="tanks"></div></div>
+        <div><p class="lbl">Actions</p><div class="tiles" id="tiles"></div></div>
       </section>
       <section data-sec="care"><div class="care-sum" id="careSum"></div><div class="cons" id="cons"></div></section>
-      <section data-sec="cams"><div class="cams" id="cams"></div><p class="note">Bild antippen für die Live-Ansicht.</p></section>
+      <section data-sec="cams"><div class="cams" id="cams"></div><p class="note">Tap a picture for the live view.</p></section>
       <section data-sec="rooms">
         <p class="note" id="rnNote"></p>
         <div class="rnhelp" id="rnHelp" hidden></div>
         <div class="rnlist" id="rnList"></div>
-        <div id="rnSuggWrap"><p class="lbl">Vorschläge</p><div class="sugg" id="rnSugg"></div></div>
+        <div id="rnSuggWrap"><p class="lbl">Suggestions</p><div class="sugg" id="rnSugg"></div></div>
       </section>
     </div>
   </aside>
@@ -568,8 +587,8 @@ class VakuumCard extends HTMLElement {
     const S = this._stage;
     this.shadowRoot.querySelectorAll("#tabs button").forEach(b => b.addEventListener("click", () => { this._setGoto(false); this._setMode(b.dataset.mode); }));
     this.$("bPlay").addEventListener("click", () => this._intent().run());
-    this.$("bStop").addEventListener("click", () => this._svc("vacuum", "stop", {}, "Gestoppt"));
-    this.$("bHome").addEventListener("click", () => this._svc("vacuum", "return_to_base", {}, "Fährt zur Station"));
+    this.$("bStop").addEventListener("click", () => this._svc("vacuum", "stop", {}, "Stopped"));
+    this.$("bHome").addEventListener("click", () => this._svc("vacuum", "return_to_base", {}, "Returning to dock"));
     this.$("bOpt").addEventListener("click", () => this._openSheet("clean"));
     this.$("cta").addEventListener("click", () => { const it = this._intent(); this._closeSheet(); it.run(); });
     this.$("rb3d").addEventListener("click", () => this._set3D(this._view3d < .5));
@@ -577,30 +596,34 @@ class VakuumCard extends HTMLElement {
     this.$("rbStation").addEventListener("click", () => this._openSheet("station"));
     this.$("rbCare").addEventListener("click", () => this._openSheet("care"));
     this.$("rbRooms").addEventListener("click", () => this._openSheet("rooms"));
-    // Eine Kamera → direkt Live-Ansicht; mehrere → Übersicht mit Standbildern
-    this.$("rbCam").addEventListener("click", () => this._cams.length === 1 ? this._moreInfo(this._cams[0].entity) : this._openSheet("cams"));
-    this.$("cams").addEventListener("click", e => { const b = e.target.closest("[data-cam]"); if (b) this._moreInfo(b.dataset.cam); });
+    // one camera → live view right away; several → overview with snapshots
+    this.$("rbCam").addEventListener("click", () => {
+      const n = this._cams.length + (this._rcamUrl ? 1 : 0);
+      if (n === 1) this._rcamUrl ? this._openRcam() : this._moreInfo(this._cams[0].entity); else this._openSheet("cams"); });
+    this.$("rcamX").addEventListener("click", () => this._closeRcam());
+    this.$("cams").addEventListener("click", e => { if (e.target.closest("[data-rcam]")) { this._closeSheet(); this._openRcam(); return; }
+      const b = e.target.closest("[data-cam]"); if (b) this._moreInfo(b.dataset.cam); });
     const rl = this.$("rnList");
     rl.addEventListener("input", e => { const i = e.target.closest("input"); if (!i) return; this._drafts[i.dataset.id] = i.value; this._updateRoomButtons(); this._drawFx(); });
     rl.addEventListener("focusin", e => { const i = e.target.closest("input"); if (i) this._focusRoom(i.dataset.id, true); });
     rl.addEventListener("keydown", e => { const i = e.target.closest("input"); if (i && e.key === "Enter") { e.preventDefault(); this._saveRoom(i.dataset.id); } });
     rl.addEventListener("click", e => { const b = e.target.closest(".rnsave"); if (b) this._saveRoom(b.dataset.id); });
-    this.$("rnSugg").addEventListener("pointerdown", e => { if (e.target.closest("[data-sugg]")) e.preventDefault(); });   // Fokus im Feld behalten
+    this.$("rnSugg").addEventListener("pointerdown", e => { if (e.target.closest("[data-sugg]")) e.preventDefault(); });   // keep focus in the input
     this.$("rnSugg").addEventListener("mousedown", e => { if (e.target.closest("[data-sugg]")) e.preventDefault(); });
     this.$("rnSugg").addEventListener("click", e => { const b = e.target.closest("[data-sugg]"); if (!b) return;
-      if (!this._editSeg) { this._toast("Erst einen Raum antippen"); return; }
+      if (!this._editSeg) { this._toast("Tap a room first"); return; }
       const inp = this.$("rn-" + this._editSeg); if (!inp || inp.disabled) return; inp.value = b.dataset.sugg; this._drafts[this._editSeg] = inp.value; this._updateRoomButtons(); this._drawFx(); });
     this.$("rbLocate").addEventListener("click", () => this._ent?.locate
-      ? this._svc("button", "press", { entity_id: this._ent.locate }, "Roboter piept")
-      : this._svc("vacuum", "locate", {}, "Roboter piept"));
+      ? this._svc("button", "press", { entity_id: this._ent.locate }, "Robot is beeping")
+      : this._svc("vacuum", "locate", {}, "Robot is beeping"));
     this.$("activity").addEventListener("click", () => this._openSheet("station"));
     this.$("shClose").addEventListener("click", () => this._closeSheet());
     this.$("scrim").addEventListener("click", () => this._closeSheet());
     this.$("ctx").addEventListener("click", e => { const b = e.target.closest("button"); if (!b) return;
       if (b.dataset.seg) this._toggleRoom(b.dataset.seg);
       else if (b.dataset.act === "clear") { this._st.selected.clear(); this._st.zone = null; this._st.goto = null; this._updateUI(); } });
-    /* Gesten: Tippen = Raum/Ziel · Ziehen = Zone (bzw. Verschieben wenn gezoomt) · zwei Finger = Zoom/Verschieben
-       · Strg/⌘ + Mausrad oder Trackpad-Pinch = Zoom. Ein Finger ohne Zoom scrollt weiter das Dashboard. */
+    /* Gestures: tap = room/target · drag = zone (or pan when zoomed) · two fingers = zoom/pan
+       · Ctrl/⌘ + mouse wheel or trackpad pinch = zoom. One finger without zoom keeps scrolling the dashboard. */
     const local = e => { const r = S.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; };
     const mid = (a, b) => ({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }), dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
     const T = new Map(), bottomSheet = () => S.getBoundingClientRect().width <= 760;
@@ -634,14 +657,14 @@ class VakuumCard extends HTMLElement {
       else if (P.drawing && this._st.zone) { const z = this._normZone(this._st.zone);
         if ((z.x1 - z.x0) * ps < 30 || (z.y1 - z.y0) * ps < 30) this._st.zone = P.prevZone; else vkBuzz(10); this._updateUI(); } };
     S.addEventListener("pointerup", e => end(e, false));
-    // Im Editor: Tippen auf die Karte soll den Fokus im Eingabefeld nicht wegnehmen (Tastatur bleibt offen)
+    // in the editor: tapping the map must not steal focus from the input (keyboard stays open)
     S.addEventListener("mousedown", e => { if (this._sheet === "rooms" && !e.target.closest(".ui")) e.preventDefault(); });
     S.addEventListener("pointercancel", e => end(e, true));
     S.addEventListener("wheel", e => { if (!(e.ctrlKey || e.metaKey) || !this._model || !this._view?.M || e.target.closest(".ui")) return;
       e.preventDefault(); const p = local(e); this._zoomAt(p.x, p.y, this._zoom.z * Math.exp(-e.deltaY * .01)); }, { passive: false });
     this.$("rbFit").addEventListener("click", () => this._resetZoom());
     this.shadowRoot.querySelectorAll("#shTabs button").forEach(b => b.addEventListener("click", () => this._showSheet(b.dataset.sec)));
-    // Bottom-Sheet nach unten wischen zum Schließen
+    // swipe the bottom sheet down to close
     const sh = this.$("sheet"), head = sh.querySelector(".sh-head"); let d = null;
     head.addEventListener("pointerdown", e => { if (!bottomSheet() || e.target.closest("button") || (this._lay === "short" && this._sheet === "rooms")) return;
       d = { y0: e.clientY, dy: 0 }; try { head.setPointerCapture(e.pointerId); } catch (_) {} sh.classList.add("dragging"); });
@@ -651,7 +674,7 @@ class VakuumCard extends HTMLElement {
     head.addEventListener("pointerup", dEnd); head.addEventListener("pointercancel", dEnd);
   }
 
-  /* ---------- Entitäten finden ---------- */
+  /* ---------- Find entities ---------- */
   _discover(){
     const h = this._hass, c = this._config, reg = h.entities || {}, E = c.entities || {};
     const dev = reg[c.entity]?.device_id;
@@ -684,7 +707,7 @@ class VakuumCard extends HTMLElement {
     return n.charAt(0).toUpperCase() + n.slice(1);
   }
 
-  /* ---------- Zustand aus HA ---------- */
+  /* ---------- State from HA ---------- */
   _update(){
     const h = this._hass, c = this._config; if (!h) return;
     if (!this._ent) this._discover();
@@ -696,8 +719,8 @@ class VakuumCard extends HTMLElement {
     if (sig === this._sig) return; this._sig = sig;
     this.$("root").classList.toggle("light", !dark);
     if (this._dark !== dark) { this._dark = dark; requestAnimationFrame(() => { this._refreshColors(); this._redraw(); }); }
-    if (!v) { this.$("stText").textContent = "Entität fehlt"; this.$("stSub").textContent = c.entity; return; }
-    this.$("name").textContent = c.title || v.attributes.friendly_name || "Saugroboter";
+    if (!v) { this.$("stText").textContent = "Entity missing"; this.$("stSub").textContent = c.entity; return; }
+    this.$("name").textContent = c.title || v.attributes.friendly_name || "Robot vacuum";
 
     const status = v.state; this._st.status = status;
     const wasCleaning = this._cleaning; this._cleaning = status === "cleaning";
@@ -706,13 +729,13 @@ class VakuumCard extends HTMLElement {
     const err = S(E.error)?.state; const hasErr = status === "error" && err && !["none", "unknown", "unavailable", ""].includes(err);
     this.$("sdot").className = "sdot " + (this._cleaning ? "busy" : status === "error" || status === "unavailable" ? "bad" : ["paused", "returning"].includes(status) ? "warn" : "");
 
-    // Akku
+    // Battery
     const bs = S(E.battery); const bl = bs ? parseFloat(bs.state) : v.attributes.battery_level;
     this.$("sBatt").innerHTML = (isFinite(bl) ? vkNf0.format(bl) : "—") + "<small>%</small>";
     const charging = v.attributes.battery_icon?.includes("charging") || (status === "docked" && bl < 100);
-    this.$("sBattL").textContent = charging ? "Lädt" : "Akku";
+    this.$("sBattL").textContent = charging ? "Charging" : "Battery";
 
-    // Statistik (Valetudo meldet Fläche in cm² oder m², Zeit in s oder min)
+    // statistics (Valetudo reports area in cm² or m², time in s or min)
     const conv = (st, kind) => { if (!st || !isFinite(parseFloat(st.state))) return null; const x = parseFloat(st.state), u = (st.attributes.unit_of_measurement || "").toLowerCase();
       if (kind === "area") return u.includes("cm") ? x / 10000 : x;
       return u === "s" ? x / 60 : u === "h" ? x * 60 : u === "ms" ? x / 60000 : x; };
@@ -720,7 +743,7 @@ class VakuumCard extends HTMLElement {
     this.$("sArea").innerHTML = (ar != null ? vkNf0.format(ar) : "—") + "<small>m²</small>";
     this.$("sTime").innerHTML = (tm != null ? vkNf0.format(Math.round(tm)) : "—") + "<small>min</small>";
     this.$("stats").classList.toggle("live", this._cleaning);
-    // Roboter ohne Statistik-Sensoren (z. B. J15 Pro Ultra): Fläche/Zeit ausblenden statt „—“
+    // robots without statistics sensors (e.g. J15 Pro Ultra): hide area/time instead of "—"
     this.$("sArea").parentElement.hidden = !E.area; this.$("sTime").parentElement.hidden = !E.time;
 
     // Presets
@@ -728,21 +751,21 @@ class VakuumCard extends HTMLElement {
     this._fan = sel(E.fan) || (v.attributes.fan_speed_list ? { cur: v.attributes.fan_speed, opts: v.attributes.fan_speed_list, vac: true } : null);
     this._water = sel(E.water); this._op = sel(E.mode);
 
-    // Wischspur: Modus beim Start der Fahrt merken
+    // mop trail: remember the mode at the start of the run
     const mopOn = this._op ? this._op.cur !== "vacuum" : (S(E.mopAttach) ? S(E.mopAttach).state === "on" : true);
     if (this._trailMop === null) this._trailMop = mopOn;
     if (this._cleaning && !this._trailCaptured) { this._trailMop = mopOn; this._trailCaptured = true; }
     if (!this._cleaning && !["paused", "returning"].includes(status)) this._trailCaptured = false;
 
-    // Station
+    // Dock
     const ds = S(E.dock)?.state, dk = VK_DOCKSTATUS[ds];
     this._dockAct = dk ? { kind: dk } : null;
-    this.$("stSub").textContent = hasErr ? "· " + err : this._dockAct && status === "docked" ? "· " + VK_DOCKACT[dk].short : status === "docked" ? (bl >= 100 ? "· voll geladen" : "· lädt") : "";
-    this.$("homeSub").textContent = status === "docked" ? "Steht an der Station" : "Laden & Pflege";
+    this.$("stSub").textContent = hasErr ? "· " + err : this._dockAct && status === "docked" ? "· " + VK_DOCKACT[dk].short : status === "docked" ? (bl >= 100 ? "· fully charged" : "· charging") : "";
+    this.$("homeSub").textContent = status === "docked" ? "At the dock" : "Charge & care";
     this.$("rbGoto").hidden = !c.topic;
     this.$("rbStation").hidden = !E.dock && !E.tanks.length && !E.empty;
     this.$("rbCare").hidden = !E.consumables.length;
-    this.$("rbCam").hidden = !this._cams.length;
+    this.$("rbCam").hidden = !this._cams.length && !this._rcamUrl;
 
     this._renderClean(); this._renderStation(); this._renderCare(); this._renderActivity(); this._updateDock();
     if (wasCleaning !== this._cleaning) this._drawFx();
@@ -756,7 +779,7 @@ class VakuumCard extends HTMLElement {
   async _fetchMap(){
     const E = this._ent, h = this._hass; if (!E || !h || this._mapBusy) return;
     const st = E.map && h.states[E.map];
-    if (!st) { this.$("nomap").textContent = "Keine Karten-Entität gefunden. In Valetudo MQTT + Home-Assistant-Autodiscovery aktivieren oder „map:“ in der Karte setzen."; return; }
+    if (!st) { this.$("nomap").textContent = "No map entity found. Enable MQTT and Home Assistant autodiscovery in Valetudo, or set “map:” in the card."; return; }
     const url = st.attributes.entity_picture; if (!url) return;
     this._mapBusy = true;
     try {
@@ -768,38 +791,38 @@ class VakuumCard extends HTMLElement {
         this.$("nomap").hidden = true;
         if (first) { this._refreshColors(); this._redraw(); } else { this._drawBase(); this._drawFx(); }
         if (segChanged) { this._renderCtx(); if (this._sheet === "rooms" && !this.shadowRoot.activeElement?.closest?.("#rnList")) this._renderRooms(); } }
-      else if (!this._model) this.$("nomap").textContent = "Karte enthält noch keine Daten – einmal eine Kartierungsfahrt starten.";
-    } catch (e) { if (!this._model) this.$("nomap").textContent = "Karte konnte nicht geladen werden (" + e.message + ")."; }
+      else if (!this._model) this.$("nomap").textContent = "The map has no data yet. Start a mapping run once.";
+    } catch (e) { if (!this._model) this.$("nomap").textContent = "Could not load the map (" + e.message + ")."; }
     finally { this._mapBusy = false; }
   }
 
-  /* ---------- Befehle ---------- */
+  /* ---------- Commands ---------- */
   async _svc(domain, service, data, ok){
     try { await this._hass.callService(domain, service, Object.assign(domain === "vacuum" ? { entity_id: this._config.entity } : {}, data)); if (ok) this._toast(ok, "ok"); }
-    catch (e) { this._toast("Fehler: " + (e.message || e), "err"); }
+    catch (e) { this._toast("Error: " + (e.message || e), "err"); }
     setTimeout(() => this._fetchMap(), 800);
   }
   _mqtt(cap, payload, ok){
-    if (!this._config.topic) { this._toast("Für Räume/Zone/Gehe zu bitte „topic:“ konfigurieren", "err"); return; }
+    if (!this._config.topic) { this._toast("Set “topic:” in the card for rooms, zones and go-to", "err"); return; }
     return this._svc("mqtt", "publish", { topic: `${this._config.topic}/${cap}/set`, payload: typeof payload === "string" ? payload : JSON.stringify(payload) }, ok);
   }
   _select(id, option, ok){ return this._svc("select", "select_option", { entity_id: id, option }, ok); }
   _intent(){
     const st = this._st, n = st.selected.size;
-    if (this._cleaning) return { label: "Pause", run: () => this._svc("vacuum", "pause", {}, "Pausiert") };
-    if (st.gotoMode && st.goto) return { label: "Hierhin fahren", run: () => { const g = st.goto; this._setGoto(false);
-      this._mqtt("GoToLocationCapability/go", { coordinates: { x: Math.round(g.x), y: Math.round(g.y) } }, "Fährt zum Ziel"); } };
+    if (this._cleaning) return { label: "Pause", run: () => this._svc("vacuum", "pause", {}, "Paused") };
+    if (st.gotoMode && st.goto) return { label: "Go here", run: () => { const g = st.goto; this._setGoto(false);
+      this._mqtt("GoToLocationCapability/go", { coordinates: { x: Math.round(g.x), y: Math.round(g.y) } }, "Driving to the target"); } };
     if (st.mode === "rooms" && n) { const ids = [...st.selected];
-      return { label: `${n} Raum${n > 1 ? "e" : ""} reinigen`, run: () => { st.selected.clear(); this._updateUI();
-        this._mqtt("MapSegmentationCapability/clean", { segment_ids: ids, iterations: st.iterations, customOrder: true }, `Reinige ${n} Raum${n > 1 ? "e" : ""}`); } }; }
+      return { label: `Clean ${n} room${n > 1 ? "s" : ""}`, run: () => { st.selected.clear(); this._updateUI();
+        this._mqtt("MapSegmentationCapability/clean", { segment_ids: ids, iterations: st.iterations, customOrder: true }, `Cleaning ${n} room${n > 1 ? "s" : ""}`); } }; }
     if (st.mode === "zone" && st.zone) { const z = this._normZone(st.zone), ps = this._model.pixelSize, R = Math.round;
       const pts = { pA: { x: R(z.x0 * ps), y: R(z.y0 * ps) }, pB: { x: R(z.x1 * ps), y: R(z.y0 * ps) }, pC: { x: R(z.x1 * ps), y: R(z.y1 * ps) }, pD: { x: R(z.x0 * ps), y: R(z.y1 * ps) } };
-      return { label: "Zone reinigen", run: () => { st.zone = null; this._updateUI();
-        this._mqtt("ZoneCleaningCapability/start", { zones: [{ points: pts }], iterations: st.iterations }, "Zonen-Reinigung gestartet"); } }; }
-    if (st.status === "paused") return { label: "Fortsetzen", run: () => this._svc("vacuum", "start", {}, "Fortgesetzt") };
-    if (st.mode === "rooms") return { label: "Räume wählen", run: () => this._toast("Erst Räume auf der Karte antippen") };
-    if (st.mode === "zone") return { label: "Zone aufziehen", run: () => this._toast("Erst eine Zone auf der Karte aufziehen") };
-    return { label: "Komplett reinigen", run: () => this._svc("vacuum", "start", {}, "Komplett-Reinigung gestartet") };
+      return { label: "Clean zone", run: () => { st.zone = null; this._updateUI();
+        this._mqtt("ZoneCleaningCapability/start", { zones: [{ points: pts }], iterations: st.iterations }, "Zone cleaning started"); } }; }
+    if (st.status === "paused") return { label: "Resume", run: () => this._svc("vacuum", "start", {}, "Resumed") };
+    if (st.mode === "rooms") return { label: "Pick rooms", run: () => this._toast("Tap rooms on the map first") };
+    if (st.mode === "zone") return { label: "Draw a zone", run: () => this._toast("Draw a zone on the map first") };
+    return { label: "Clean everything", run: () => this._svc("vacuum", "start", {}, "Full cleaning started") };
   }
 
   /* ---------- UI ---------- */
@@ -814,18 +837,18 @@ class VakuumCard extends HTMLElement {
   _renderCtx(){
     const row = this.$("ctx"), st = this._st, M = this._model; let html = "";
     const prev = row.querySelector(".chips")?.scrollLeft || 0;
-    if (st.gotoMode) html = st.goto ? `<span class="info glass">${vkIc("target")}<b>Ziel gesetzt</b> · Start-Taste fährt los <button data-act="clear" aria-label="Ziel löschen">${vkIc("close")}</button></span>`
-                                    : `<span class="info glass">${vkIc("target")}Punkt auf der Karte antippen</span>`;
-    else if (!M) html = `<span class="info glass">Karte wird geladen…</span>`;
+    if (st.gotoMode) html = st.goto ? `<span class="info glass">${vkIc("target")}<b>Target set</b> · press start to go <button data-act="clear" aria-label="Clear target">${vkIc("close")}</button></span>`
+                                    : `<span class="info glass">${vkIc("target")}Tap a point on the map</span>`;
+    else if (!M) html = `<span class="info glass">Loading map…</span>`;
     else if (st.mode === "rooms") { html = `<div class="chips">`;
       if (st.selected.size) { const a = M.segments.filter(s => st.selected.has(s.id)).reduce((x, s) => x + s.area, 0);
         html += `<button class="chip sum" data-act="clear">${vkIc("close")} ${st.selected.size} · ${vkNf1.format(a)} m²</button>`; }
       for (const s of M.segments) html += `<button class="chip" data-seg="${s.id}" aria-pressed="${st.selected.has(s.id)}"><span class="d" style="background:${s.color}"></span>${vkEsc(s.name)}<small>${(s.area < 10 ? vkNf1 : vkNf0).format(s.area)} m²</small></button>`;
       html += `</div>`; }
-    else if (st.mode === "full") html = `<span class="info glass"><b>Alle ${M.segments.length} Räume</b> · ${vkNf0.format(M.totalArea)} m²</span>`;
+    else if (st.mode === "full") html = `<span class="info glass"><b>All ${M.segments.length} rooms</b> · ${vkNf0.format(M.totalArea)} m²</span>`;
     else if (st.mode === "zone") { if (st.zone && !this._ptr) { const z = this._normZone(st.zone), ps = M.pixelSize;
-        html = `<span class="info glass"><b>Zone ${vkNf1.format((z.x1 - z.x0) * ps / 100)} × ${vkNf1.format((z.y1 - z.y0) * ps / 100)} m</b> <button data-act="clear" aria-label="Zone löschen">${vkIc("close")}</button></span>`; }
-      else html = `<span class="info glass">Rechteck auf der Karte aufziehen</span>`; }
+        html = `<span class="info glass"><b>Zone ${vkNf1.format((z.x1 - z.x0) * ps / 100)} × ${vkNf1.format((z.y1 - z.y0) * ps / 100)} m</b> <button data-act="clear" aria-label="Clear zone">${vkIc("close")}</button></span>`; }
+      else html = `<span class="info glass">Drag a rectangle on the map</span>`; }
     row.innerHTML = html; const ch = row.querySelector(".chips"); if (ch) ch.scrollLeft = prev;
   }
   _updateDock(){
@@ -834,7 +857,7 @@ class VakuumCard extends HTMLElement {
     orb.classList.toggle("busy", !!this._cleaning);
     this.$("bStop").hidden = !["cleaning", "paused", "returning"].includes(st.status);
     const n = st.mode === "rooms" ? st.selected.size : 0; this.$("badge").hidden = !n; this.$("badge").textContent = n;
-    this.$("optTop").textContent = this._op ? (VK_OP[this._op.cur] || this._op.cur) : "Optionen";
+    this.$("optTop").textContent = this._op ? (VK_OP[this._op.cur] || this._op.cur) : "Options";
     this.$("optSub").textContent = [this._fan && (VK_FAN[this._fan.cur] || this._fan.cur), st.iterations + "×"].filter(Boolean).join(" · ");
     this.$("cta").textContent = it.label;
     const t = this.shadowRoot.querySelector('#tabs [data-mode="zone"]'), r = this.shadowRoot.querySelector('#tabs [data-mode="rooms"]');
@@ -853,10 +876,10 @@ class VakuumCard extends HTMLElement {
     if (this._op) this._segBtns(this.$("segOp"), this._op.opts, this._op.cur, p => this._select(E.mode, p, VK_OP[p] || p), p => VK_OP[p] || p);
     this.$("gFan").hidden = !this._fan; this.$("vFan").textContent = this._fan ? (VK_FAN[this._fan.cur] || this._fan.cur) : "";
     if (this._fan) this._segBtns(this.$("segFan"), this._fan.opts, this._fan.cur,
-      p => this._fan.vac ? this._svc("vacuum", "set_fan_speed", { fan_speed: p }, "Saugkraft: " + (VK_FAN[p] || p)) : this._select(E.fan, p, "Saugkraft: " + (VK_FAN[p] || p)),
+      p => this._fan.vac ? this._svc("vacuum", "set_fan_speed", { fan_speed: p }, "Suction: " + (VK_FAN[p] || p)) : this._select(E.fan, p, "Suction: " + (VK_FAN[p] || p)),
       p => VK_FAN[p] || p, i => lv(i, this._fan.opts.length));
     this.$("gWater").hidden = !this._water; this.$("vWater").textContent = this._water ? (VK_WATER[this._water.cur] || this._water.cur) : "";
-    if (this._water) this._segBtns(this.$("segWater"), this._water.opts, this._water.cur, p => this._select(E.water, p, "Wasser: " + (VK_WATER[p] || p)), p => VK_WATER[p] || p, i => lv(i + 1, this._water.opts.length + 1));
+    if (this._water) this._segBtns(this.$("segWater"), this._water.opts, this._water.cur, p => this._select(E.water, p, "Water: " + (VK_WATER[p] || p)), p => VK_WATER[p] || p, i => lv(i + 1, this._water.opts.length + 1));
     this._segBtns(this.$("segIt"), [1, 2, 3], this._st.iterations, p => { this._st.iterations = p; this._renderClean(); this._updateDock(); }, p => p + "×");
   }
   _renderStation(){
@@ -865,12 +888,12 @@ class VakuumCard extends HTMLElement {
     this.$("tanks").innerHTML = E.tanks.map(id => { const s = h.states[id]; const [v, cls] = VK_DOCKVAL[s?.state] || [s?.state ?? "—", ""];
       return `<div class="tank ${cls}"><div class="k">${this._short(id)}</div><div class="v">${v}</div></div>`; }).join("");
     const tiles = [];
-    if (E.empty || this._config.topic) tiles.push({ kind: "empty", icon: "bin", name: "Absaugen", sub: "Staubbehälter leeren",
-      run: () => E.empty ? this._svc("button", "press", { entity_id: E.empty }, "Station saugt ab") : this._mqtt("AutoEmptyDockManualTriggerCapability/trigger", "PERFORM", "Station saugt ab") });
-    tiles.push({ icon: "home", name: "Zur Station", sub: "Laden & Pflege", run: () => this._svc("vacuum", "return_to_base", {}, "Fährt zur Station") });
+    if (E.empty || this._config.topic) tiles.push({ kind: "empty", icon: "bin", name: "Empty bin", sub: "Empty the dust bin",
+      run: () => E.empty ? this._svc("button", "press", { entity_id: E.empty }, "Dock is emptying") : this._mqtt("AutoEmptyDockManualTriggerCapability/trigger", "PERFORM", "Dock is emptying") });
+    tiles.push({ icon: "home", name: "Back to dock", sub: "Charge & care", run: () => this._svc("vacuum", "return_to_base", {}, "Returning to dock") });
     const box = this.$("tiles"); box.innerHTML = "";
     for (const t of tiles) { const run = t.kind && this._dockAct?.kind === t.kind, b = document.createElement("button");
-      b.className = "tile" + (run ? " run" : ""); b.innerHTML = `<span class="ti">${vkIc(t.icon)}</span><span><b>${t.name}</b><small>${run ? "Läuft…" : t.sub}</small></span>`;
+      b.className = "tile" + (run ? " run" : ""); b.innerHTML = `<span class="ti">${vkIc(t.icon)}</span><span><b>${t.name}</b><small>${run ? "Running…" : t.sub}</small></span>`;
       b.addEventListener("click", t.run); box.appendChild(b); }
   }
   _renderCare(){
@@ -885,7 +908,7 @@ class VakuumCard extends HTMLElement {
     const rb = this.$("rbCare"); rb.querySelector(".dot")?.remove(); if (low.length) rb.insertAdjacentHTML("beforeend", `<span class="dot"></span>`);
     const oi = this.$("bOpt").querySelector(".sic"); oi.querySelector(".dot")?.remove(); if (low.length) oi.insertAdjacentHTML("beforeend", `<span class="dot"></span>`);
     const worst = list.slice().sort((a, b) => a.pct - b.pct)[0];
-    this.$("careSum").innerHTML = `<span class="ti">${vkIc("wrench")}</span><div><b>${worst ? (worst.pct < 25 ? worst.name + " bald fällig" : "Alles im grünen Bereich") : "Keine Daten"}</b><small>${worst ? "Als Nächstes: " + worst.name + " · " + worst.label : ""}</small></div>`;
+    this.$("careSum").innerHTML = `<span class="ti">${vkIc("wrench")}</span><div><b>${worst ? (worst.pct < 25 ? worst.name + " due soon" : "All good") : "No data"}</b><small>${worst ? "Next up: " + worst.name + " · " + worst.label : ""}</small></div>`;
     this.$("cons").innerHTML = list.map(c => `<div class="c"><span class="nm">${c.name}</span><span class="vl">${c.label}</span><span class="bar"><i class="${c.pct < 10 ? "crit" : c.pct < 25 ? "low" : ""}" style="width:${c.pct}%"></i></span></div>`).join("");
   }
   _renderActivity(){
@@ -902,11 +925,11 @@ class VakuumCard extends HTMLElement {
   /* ---------- Sheets ---------- */
   _openSheet(name){ if (this._sheet === name) { this._closeSheet(); return; } this._showSheet(name); }
   _showSheet(name){
-    this._sheet = name; this.$("shTitle").textContent = { clean: "Reinigung", station: "Station", care: "Pflege", rooms: "Räume benennen", cams: "Kameras" }[name];
+    this._sheet = name; this.$("shTitle").textContent = { clean: "Cleaning", station: "Dock", care: "Care", rooms: "Rename rooms", cams: "Cameras" }[name];
     if (name !== "rooms") { this._editSeg = null; this._drafts = {}; } else this._renderRooms();
     this._stage.classList.toggle("editing", name === "rooms");
     this.shadowRoot.querySelectorAll("#shTabs button").forEach(b => { b.setAttribute("aria-pressed", b.dataset.sec === name);
-      b.hidden = (b.dataset.sec === "station" && this.$("rbStation").hidden) || (b.dataset.sec === "care" && this.$("rbCare").hidden) || (b.dataset.sec === "cams" && !this._cams.length); });
+      b.hidden = (b.dataset.sec === "station" && this.$("rbStation").hidden) || (b.dataset.sec === "care" && this.$("rbCare").hidden) || (b.dataset.sec === "cams" && !this._cams.length && !this._rcamUrl); });
     if (name === "cams") this._renderCams(true);
     this.shadowRoot.querySelectorAll(".sh-body section").forEach(s => s.hidden = s.dataset.sec !== name);
     this.$("sheet").classList.add("open"); this._stage.classList.add("drawer");
@@ -923,12 +946,26 @@ class VakuumCard extends HTMLElement {
     setTimeout(() => this._redraw(), 30); setTimeout(() => this._redraw(), 420);
   }
 
-  /* ---------- Kameras ---------- */
+  /* ---------- Cameras ---------- */
+  _openRcam(){
+    const u = this._rcamUrl, el = this.$("rcam"), fr = this.$("rcamFrame"), hint = this.$("rcamHint");
+    this.$("rcamExt").href = u;
+    // HA over https (e.g. remote) cannot embed an http page → show a note instead of an empty frame
+    const blocked = location.protocol === "https:" && u.startsWith("http:");
+    fr.hidden = blocked; hint.hidden = !blocked;
+    if (blocked) hint.innerHTML = `Home Assistant is open over <b>https</b>, but the robot camera is only reachable over <b>http</b>, so the browser blocks embedding it.<br><br>Open Home Assistant via <code>http://</code> at home, or use the button at the top right to open it in a new tab.`;
+    else if (fr.src !== u) fr.src = u;
+    el.classList.add("open"); el.setAttribute("aria-hidden", "false"); vkBuzz(8);
+  }
+  _closeRcam(){ const el = this.$("rcam"); el.classList.remove("open"); el.setAttribute("aria-hidden", "true");
+    setTimeout(() => { if (!el.classList.contains("open")) this.$("rcamFrame").removeAttribute("src"); }, 300); }   // stop the stream
   _moreInfo(entityId){ this.dispatchEvent(new CustomEvent("hass-more-info", { detail: { entityId }, bubbles: true, composed: true })); }
   _renderCams(full){
     const box = this.$("cams"), h = this._hass; if (!h) return;
-    if (full || box.children.length !== this._cams.length) box.innerHTML = this._cams.map(c => `<button class="cam" data-cam="${vkEsc(c.entity)}"><span class="ph">Kein Bild</span><img alt="" hidden><span class="cn"><i></i><span></span></span></button>`).join("");
-    this._cams.forEach((c, i) => { const st = h.states[c.entity], el = box.children[i], img = el.querySelector("img");
+    const head = this._rcamUrl ? `<button class="cam robot" data-rcam="1"><span class="ph">${vkIc("camera")}<span>Live view from the robot</span></span><span class="cn"><i></i><span>Robot</span></span></button>` : "";
+    const off0 = this._rcamUrl ? 1 : 0;
+    if (full || box.children.length !== this._cams.length + off0) box.innerHTML = head + this._cams.map(c => `<button class="cam" data-cam="${vkEsc(c.entity)}"><span class="ph">No image</span><img alt="" hidden><span class="cn"><i></i><span></span></span></button>`).join("");
+    this._cams.forEach((c, i) => { const st = h.states[c.entity], el = box.children[i + off0], img = el.querySelector("img");
       const off = !st || ["unavailable", "unknown", "off"].includes(st.state);
       el.classList.toggle("off", off); el.querySelector(".cn span").textContent = c.name || st?.attributes.friendly_name || c.entity;
       const pic = st?.attributes.entity_picture;
@@ -937,9 +974,12 @@ class VakuumCard extends HTMLElement {
       else img.hidden = true; });
   }
 
-  /* ---------- Räume benennen (Valetudo MapSegmentRenameCapability über einen HA-Dienst) ---------- */
-  _renameSvc(){ const n = String(this._config.rename_service || "rest_command.vakuum_raum_umbenennen"), [d, sv] = n.split(".");
-    return { name: n, domain: d, service: sv, ok: !!(d && sv && this._hass?.services?.[d]?.[sv]) }; }
+  /* ---------- Rename rooms (Valetudo MapSegmentRenameCapability via a HA service) ---------- */
+  _renameSvc(){
+    const has = n => { const [d, sv] = n.split("."); return !!(d && sv && this._hass?.services?.[d]?.[sv]); };
+    let n = String(this._config.rename_service || "rest_command.vacuum_rename_room");
+    if (!this._config.rename_service && !has(n) && has("rest_command.vakuum_raum_umbenennen")) n = "rest_command.vakuum_raum_umbenennen";   // older package
+    const [d, sv] = n.split("."); return { name: n, domain: d, service: sv, ok: has(n) }; }
   _curName(id){ const sg = this._model?.segments.find(x => x.id === id); return sg && sg.named ? sg.name : ""; }
   _applyPending(parsed){
     const P = this._pendNames, now = Date.now(); let touched = false;
@@ -950,16 +990,16 @@ class VakuumCard extends HTMLElement {
   }
   _renderRooms(){
     const box = this.$("rnList"), M = this._model, R = this._renameSvc(), can = R.ok;
-    if (!M) { box.innerHTML = `<p class="note">Karte wird geladen…</p>`; this.$("rnSuggWrap").hidden = true; return; }
-    this.$("rnNote").textContent = can ? "Raum auf der Karte oder in der Liste antippen, Namen eingeben und speichern. Der Name wird im Roboter gespeichert und gilt danach überall – auch für die Skripte."
-                                       : "Namen kannst du hier schon eintippen – zum Speichern fehlt noch der Dienst:";
+    if (!M) { box.innerHTML = `<p class="note">Loading map…</p>`; this.$("rnSuggWrap").hidden = true; return; }
+    this.$("rnNote").textContent = can ? "Tap a room on the map or in the list, type a name and save. The name is stored in the robot and used everywhere, including the scripts."
+                                       : "You can type names already, but saving needs a service that is not set up yet:";
     const help = this.$("rnHelp"); help.hidden = can;
-    if (!can) help.innerHTML = `Dienst <code>${vkEsc(R.name)}</code> nicht gefunden. Im Paket <code>vakuum.yaml</code> ist er unter <code>rest_command:</code> vorbereitet – dort <code>ROBOTER_IP</code> durch die IP des Roboters ersetzen und Home Assistant neu starten.`;
+    if (!can) help.innerHTML = `Service <code>${vkEsc(R.name)}</code> not found. The package <code>vacuum.yaml</code> has it under <code>rest_command:</code>. Replace <code>ROBOT_IP</code> there with the robot's IP address and restart Home Assistant.`;
     box.innerHTML = M.segments.map(sg => `<div class="rn${this._editSeg === sg.id ? " on" : ""}" data-id="${vkEsc(sg.id)}">
         <span class="d" style="background:${sg.color}"></span>
-        <label class="rnf"><input id="rn-${vkEsc(sg.id)}" data-id="${vkEsc(sg.id)}" value="${vkEsc(this._drafts[sg.id] ?? this._curName(sg.id))}" placeholder="Raum ${vkEsc(sg.id)}" maxlength="32" autocomplete="off" enterkeyhint="done">
+        <label class="rnf"><input id="rn-${vkEsc(sg.id)}" data-id="${vkEsc(sg.id)}" value="${vkEsc(this._drafts[sg.id] ?? this._curName(sg.id))}" placeholder="Room ${vkEsc(sg.id)}" maxlength="32" autocomplete="off" enterkeyhint="done">
           <small>${(sg.area < 10 ? vkNf1 : vkNf0).format(sg.area)} m² · Segment ${vkEsc(sg.id)}</small></label>
-        <button class="rnsave" data-id="${vkEsc(sg.id)}" disabled>Speichern</button></div>`).join("");
+        <button class="rnsave" data-id="${vkEsc(sg.id)}" disabled>Save</button></div>`).join("");
     this.$("rnSugg").innerHTML = VK_ROOM_SUGG.map(n => `<button class="chip" data-sugg="${vkEsc(n)}">${vkEsc(n)}</button>`).join("");
     this.$("rnSuggWrap").hidden = false;
     this._updateRoomButtons();
@@ -973,19 +1013,19 @@ class VakuumCard extends HTMLElement {
   }
   async _saveRoom(id){
     const name = (this._drafts[id] ?? "").trim(), R = this._renameSvc(); if (!name || name === this._curName(id)) return;
-    if (!R.ok) { this._toast("Dienst " + R.name + " fehlt – siehe Hinweis", "err"); return; }
+    if (!R.ok) { this._toast("Service " + R.name + " is missing, see the note", "err"); return; }
     try {
       const data = { segment_id: String(id), name }, wantResp = R.domain === "rest_command";
       const res = await this._hass.callService(R.domain, R.service, data, undefined, false, wantResp);
-      const code = res?.response?.status; if (code && code >= 400) throw new Error("Roboter antwortet mit HTTP " + code);
+      const code = res?.response?.status; if (code && code >= 400) throw new Error("Robot answered with HTTP " + code);
       delete this._drafts[id]; this._pendNames[id] = { name, t: Date.now() };
       const sg = this._model?.segments.find(x => x.id === id); if (sg) { sg.name = name; sg.named = true; this._model.sig = this._model.segments.map(s => s.id + ":" + s.name).join("|"); }
-      this._toast("Gespeichert: " + name, "ok"); vkBuzz(12); this._renderRooms(); this._renderCtx(); this._drawFx();
+      this._toast("Saved: " + name, "ok"); vkBuzz(12); this._renderRooms(); this._renderCtx(); this._drawFx();
       setTimeout(() => this._fetchMap(), 1500); setTimeout(() => this._fetchMap(), 6000);
-    } catch (e) { this._toast("Speichern fehlgeschlagen: " + (e.message || e), "err"); }
+    } catch (e) { this._toast("Saving failed: " + (e.message || e), "err"); }
   }
 
-  /* ---------- Renderer (affine 2D/3D-Projektion) ---------- */
+  /* ---------- Renderer (affine 2D/3D projection) ---------- */
   _refreshColors(){
     const cs = getComputedStyle(this.$("root")), g = n => cs.getPropertyValue(n).trim();
     this._COL = { floor: g("--floor"), slab: g("--slab"), wallTop: g("--wall-top"), wallSide: g("--wall-side"), a1: g("--a1"), a2: g("--a2"),
@@ -1109,7 +1149,7 @@ class VakuumCard extends HTMLElement {
     for (const e of M.entities) if (["no_go_area", "no_mop_area", "active_zone"].includes(e.type)) { this._setM(ctx, 0); ctx.beginPath();
       for (let i = 0; i < e.points.length; i += 2) { const x = e.points[i] / ps, y = e.points[i + 1] / ps; i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); } ctx.closePath();
       const col = e.type === "active_zone" ? C.a1 : C.bad; ctx.fillStyle = vkHexA(col, .16); ctx.fill(); ctx.lineWidth = 1.4 / s; ctx.setLineDash([4 / s, 3 / s]); ctx.strokeStyle = col; ctx.stroke(); ctx.setLineDash([]); }
-    // Fahrspur + Wasserspur
+    // driving path + water trail
     const PT = vkSplitPaths(M.entities), hasPath = PT.clean.length + PT.travel.length > 0, wet = !!this._trailMop, hasCarpet = M.entities.some(e => e.type === "carpet");
     const lg = this.$("legend"), showLg = hasPath || hasCarpet; if (lg.hidden === showLg) lg.hidden = !showLg;
     this.$("lgVac").hidden = !PT.clean.length; this.$("lgMop").hidden = !wet || !PT.clean.length; this.$("lgTravel").hidden = !PT.travel.length; this.$("lgCarpet").hidden = !hasCarpet;
@@ -1120,10 +1160,10 @@ class VakuumCard extends HTMLElement {
       this._setM(ctx, 0); ctx.lineJoin = "round"; ctx.lineCap = "round";
       if (PT.travel.length) { trace(PT.travel); ctx.lineWidth = 1.2 / s; ctx.setLineDash([3 / s, 4 / s]); ctx.strokeStyle = vkHexA(C.fg, .4); ctx.stroke(); ctx.setLineDash([]); }
       if (PT.clean.length) {
-        if (wet) { const band = 34 / ps;                                           // ~34 cm Wischbreite
-          trace(PT.clean); ctx.lineWidth = band; ctx.strokeStyle = vkHexA(C.water, .16); ctx.stroke();   // angetrocknet
-          trace(tail(80)); ctx.strokeStyle = vkHexA(C.water, .2); ctx.stroke();                          // noch feucht
-          trace(tail(24)); ctx.strokeStyle = vkHexA(C.water, .2); ctx.stroke();                          // frisch nass
+        if (wet) { const band = 34 / ps;                                           // ~34 cm mop width
+          trace(PT.clean); ctx.lineWidth = band; ctx.strokeStyle = vkHexA(C.water, .16); ctx.stroke();   // dried
+          trace(tail(80)); ctx.strokeStyle = vkHexA(C.water, .2); ctx.stroke();                          // still damp
+          trace(tail(24)); ctx.strokeStyle = vkHexA(C.water, .2); ctx.stroke();                          // fresh and wet
           trace(PT.clean); ctx.lineWidth = band * .22; ctx.setLineDash([10 / s, 34 / s]); ctx.lineDashOffset = -(now / 45) / s; ctx.strokeStyle = "rgba(255,255,255,.32)"; ctx.stroke(); ctx.setLineDash([]); }
         trace(PT.clean); ctx.lineWidth = 1.3 / s; ctx.strokeStyle = vkHexA(C.fg, wet ? .55 : .78); ctx.stroke(); } }
     if (st.zone) { const z = this._normZone(st.zone); this._setM(ctx, 0);
@@ -1169,7 +1209,7 @@ class VakuumCard extends HTMLElement {
       ctx.save(); ctx.translate(x, y); ctx.rotate(ha); ctx.beginPath(); ctx.moveTo(7, 0); ctx.lineTo(1.5, -3.5); ctx.lineTo(1.5, 3.5); ctx.closePath(); ctx.fillStyle = "#fff"; ctx.fill(); ctx.restore(); }
   }
 
-  /* ---------- Stations-Animation ---------- */
+  /* ---------- Dock animation ---------- */
   _dvRun(){
     cancelAnimationFrame(this._dvRaf); this._dv.last = performance.now();
     const f = now => { this._dvFrame(now); if (this._sheet === "station" && this.isConnected) this._dvRaf = requestAnimationFrame(f); };
@@ -1198,8 +1238,8 @@ class VakuumCard extends HTMLElement {
     this._drawPad(ctx, cx1, cy, R, D.rot, k); this._drawPad(ctx, cx2, cy, R, -D.rot, k);
     for (const p of front) { this._dvStep(p, dt, W, H); this._dvDraw(ctx, p); }
     const d = k ? VK_DOCKACT[k] : null;
-    this.$("dvT").textContent = d ? d.title : this._st.status === "docked" ? "Station bereit" : "Roboter unterwegs";
-    this.$("dvS").textContent = d ? d.sub : "Mopps sauber und trocken";
+    this.$("dvT").textContent = d ? d.title : this._st.status === "docked" ? "Dock ready" : "Robot is out";
+    this.$("dvS").textContent = d ? d.sub : "Mop pads clean and dry";
     this.$("dvBar").hidden = !k;
   }
   _drawPad(ctx, cx, cy, R, rot, k){
@@ -1239,7 +1279,8 @@ class VakuumCard extends HTMLElement {
 }
 
 if (!customElements.get("vakuum-card")) customElements.define("vakuum-card", VakuumCard);
+if (!customElements.get("vacuum-card")) customElements.define("vacuum-card", class extends VakuumCard {});   // English alias: type: custom:vacuum-card
 window.customCards = window.customCards || [];
 if (!window.customCards.some(c => c.type === "vakuum-card"))
-  window.customCards.push({ type: "vakuum-card", name: "Vakuum-Karte", description: "Valetudo-Saugroboter: Karte mit 2D/3D, Räume, Zone, Station, Pflege", preview: false });
-console.info(`%c VAKUUM-KARTE %c ${VK_VERSION} `, "background:#5b53c9;color:#fff;border-radius:3px 0 0 3px;padding:2px 4px", "background:#0c8f95;color:#fff;border-radius:0 3px 3px 0;padding:2px 4px");
+  window.customCards.push({ type: "vakuum-card", name: "Vacuum Card", description: "Valetudo robot vacuum: 2D/3D map, rooms, zones, dock, care, cameras, room editor", preview: false });
+console.info(`%c VACUUM CARD %c ${VK_VERSION} `, "background:#5b53c9;color:#fff;border-radius:3px 0 0 3px;padding:2px 4px", "background:#0c8f95;color:#fff;border-radius:0 3px 3px 0;padding:2px 4px");
