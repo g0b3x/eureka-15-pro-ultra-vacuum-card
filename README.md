@@ -20,7 +20,7 @@ entity: vacuum.valetudo_talltotalfalcon   # your Valetudo vacuum entity
 topic: valetudo/TallTotalFalcon     # Valetudo MQTT <topic prefix>/<identifier>
 ```
 
-Needs Valetudo with MQTT, Home Assistant Autodiscovery and "Provide map data" enabled. All options: `height`, `view_3d`, `theme`, `title`, `map`, `consumables`, `rename_service`, `entities` (see the full bundle's `dashboard-beispiel.yaml`).
+Needs Valetudo with MQTT, Home Assistant Autodiscovery and "Provide map data" enabled. All options: `height`, `view_3d`, `theme`, `title`, `map`, `consumables`, `cameras`, `rename_service`, `entities` (see the full bundle's `dashboard-beispiel.yaml`).
 
 ### Renaming rooms
 

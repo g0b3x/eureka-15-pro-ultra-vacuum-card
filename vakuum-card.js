@@ -18,7 +18,7 @@
    - Räume / Zone / Gehe zu: mqtt.publish an die Valetudo-Topics.
    ========================================================================== */
 
-const VK_VERSION = "1.2.0";
+const VK_VERSION = "1.3.0";
 
 /* ---------- Icons (eigene Linien-Icons) ---------- */
 const VK_ICONS = {
@@ -39,6 +39,7 @@ const VK_ICONS = {
   wind: '<path d="M3 8h11a3 3 0 1 0-3-3M3 12h15a3 3 0 1 1-3 3M3 16h7"/>',
   wrench: '<path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L4 17l3 3 5.3-5.3a4 4 0 0 0 5.4-5.4l-2.5 2.5-2.4-.5-.5-2.4 2.4-2.6Z"/>',
   locate: '<path d="M12 4v2M12 18v2M4 12h2M18 12h2"/><circle cx="12" cy="12" r="5"/><path d="M19 5l-2 2M5 19l2-2"/>',
+  camera: '<path d="M3.5 8.5h3.2l1.8-2.5h7l1.8 2.5h3.2v10.5h-17V8.5Z"/><circle cx="12" cy="13.5" r="3.6"/>',
   pencil: '<path d="M4 20h4L19 9l-4-4L4 16v4Z"/><path d="M13.5 6.5l4 4"/>',
 };
 const vkIc = n => `<svg class="i" viewBox="0 0 24 24" aria-hidden="true">${VK_ICONS[n] || ""}</svg>`;
@@ -129,9 +130,9 @@ function vkParseMap(m){
 
 /* ---------- Styles ---------- */
 const VK_CSS = `
-:host { display: block; }
+:host { display: block; height: 100%; }
 *, *::before, *::after { box-sizing: border-box; }
-ha-card { display: block; position: relative; overflow: hidden; height: var(--vk-h, 620px); container: vk / inline-size; border-radius: var(--ha-card-border-radius, 16px); }
+ha-card { display: block; position: relative; overflow: hidden; height: var(--vk-h, 620px); max-height: 100%; isolation: isolate; container: vk / inline-size; border-radius: var(--ha-card-border-radius, 16px); }
 .root { position: absolute; inset: 0; font-family: var(--ha-font-family-body, var(--paper-font-body1_-_font-family, inherit));
   --a1: var(--vk-accent-1, #36e2cf); --a2: var(--vk-accent-2, #8a7dff); --water: #5cc8ff; --heat: #ff9b4f; --on-accent: #fff;
   --good: #47d68a; --warn: #f5c35a; --bad: #ff6b7d; --r: 16px;
@@ -297,6 +298,15 @@ canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block
 .tank .v::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--good); }
 .tank.warn .v::before { background: var(--warn); } .tank.bad .v::before { background: var(--bad); }
 .tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; }
+.cams { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
+.cam { appearance: none; position: relative; display: block; padding: 0; border: 1px solid var(--stroke2); border-radius: 15px; overflow: hidden; background: var(--stroke); color: #fff; cursor: pointer; aspect-ratio: 16 / 10; text-align: left; }
+.cam img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.cam .cn { position: absolute; left: 0; right: 0; bottom: 0; padding: 18px 10px 8px; display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600;
+  background: linear-gradient(to top, rgba(0,0,0,.72), transparent); }
+.cam .cn i { width: 7px; height: 7px; border-radius: 50%; background: var(--good); flex: none; }
+.cam.off .cn i { background: var(--muted); }
+.cam.off img { opacity: .35; filter: grayscale(1); }
+.cam .ph { position: absolute; inset: 0; display: grid; place-items: center; color: var(--muted); font-size: 11.5px; }
 .tile { appearance: none; border: 1px solid var(--stroke); border-radius: 17px; padding: 14px; min-height: 100px; background: var(--stroke); color: var(--fg); cursor: pointer; text-align: left; display: flex; flex-direction: column; justify-content: space-between; gap: 12px; }
 .tile:hover:not(:disabled) { border-color: var(--a1); } .tile:disabled { opacity: .45; cursor: not-allowed; }
 .tile.run { border-color: var(--a1); box-shadow: inset 0 0 0 1px var(--a1); }
@@ -379,6 +389,10 @@ canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block
 .stage[data-lay="phone"] .stat span, .stage[data-lay="short"] .stat span { font-size: 8.5px; margin-top: 5px; letter-spacing: .06em; }
 .stage[data-lay="phone"] .rail, .stage[data-lay="short"] .rail { top: var(--rail-top, 80px); bottom: auto; right: 10px; transform: none; flex-direction: row; gap: 2px; padding: 4px; border-radius: 999px; }
 .stage[data-lay="short"] .rail { top: 10px; }
+/* Breit: Leiste zwischen Kopfzeile und Bedienfeld; bei vielen Knöpfen ohne Beschriftung */
+.stage[data-lay="wide"] .rail { top: var(--rail-y, 50%); transform: none; }
+.stage.railc .rb em { display: none; }
+.stage.railc .rb { padding: 10px 0; }
 .stage[data-lay="phone"] .rb, .stage[data-lay="short"] .rb { width: 42px; height: 42px; padding: 0; justify-content: center; border-radius: 50%; }
 .stage[data-lay="phone"] .rb em, .stage[data-lay="short"] .rb em { display: none; }
 .stage[data-lay="phone"] .rb .dot, .stage[data-lay="short"] .rb .dot { top: 5px; right: 5px; }
@@ -445,6 +459,8 @@ class VakuumCard extends HTMLElement {
     // Standardhöhe passt sich dem Bildschirm an (Handy ≈ volle Höhe, Desktop max. 680 px)
     this._config = Object.assign({ height: "clamp(460px, calc(100vh - 140px), 680px)", view_3d: false, theme: "auto" }, config);
     this._config.topic = (this._config.topic || "").replace(/\/+$/, "");
+    const cams = this._config.cameras ? [].concat(this._config.cameras) : [];
+    this._cams = cams.map(c => typeof c === "string" ? { entity: c } : c).filter(c => c && String(c.entity || "").startsWith("camera."));
     this._ent = null; this._sig = null;
     if (!this._built) this._build();
     const h = this._config.height;
@@ -455,7 +471,7 @@ class VakuumCard extends HTMLElement {
   }
   set hass(h){ const first = !this._hass; this._hass = h; if (!this._built || !this._config) return; this._update(); if (first) this._fetchMap(); }
   getCardSize(){ return 9; }
-  getGridOptions(){ return { columns: 12, rows: 9, min_columns: 6, min_rows: 6 }; }
+  getGridOptions(){ return { columns: "full", rows: "auto", min_columns: 6 }; }
   connectedCallback(){
     this._timer = setInterval(() => this._tick(), 2500);
     const loop = () => { this._raf = requestAnimationFrame(loop);
@@ -494,6 +510,7 @@ class VakuumCard extends HTMLElement {
     <button class="rb" id="rbFit" title="Ansicht zurücksetzen" hidden>${vkIc("fit")}<em>Ganz</em></button>
     <button class="rb deskonly" id="rbStation" title="Station">${vkIc("station")}<em>Station</em></button>
     <button class="rb deskonly" id="rbCare" title="Pflege">${vkIc("care")}<em>Pflege</em></button>
+    <button class="rb" id="rbCam" title="Kameras" hidden>${vkIc("camera")}<em>Kamera</em></button>
     <button class="rb" id="rbRooms" title="Räume benennen">${vkIc("pencil")}<em>Räume</em></button>
     <button class="rb" id="rbLocate" title="Roboter orten">${vkIc("locate")}<em>Orten</em></button>
   </nav>
@@ -512,7 +529,7 @@ class VakuumCard extends HTMLElement {
   <div class="scrim" id="scrim"></div>
   <aside class="sheet ui" id="sheet">
     <header class="sh-head"><h3 id="shTitle"></h3><button class="x" id="shClose" aria-label="Schließen">${vkIc("close")}</button></header>
-    <div class="shtabs" id="shTabs"><button data-sec="clean">Reinigung</button><button data-sec="station">Station</button><button data-sec="care">Pflege</button><button data-sec="rooms">Räume</button></div>
+    <div class="shtabs" id="shTabs"><button data-sec="clean">Reinigung</button><button data-sec="station">Station</button><button data-sec="care">Pflege</button><button data-sec="rooms">Räume</button><button data-sec="cams">Kameras</button></div>
     <div class="sh-body">
       <section data-sec="clean">
         <div id="gOp" hidden><p class="lbl">Betriebsart</p><div class="seg" id="segOp"></div></div>
@@ -529,6 +546,7 @@ class VakuumCard extends HTMLElement {
         <div><p class="lbl">Aktionen</p><div class="tiles" id="tiles"></div></div>
       </section>
       <section data-sec="care"><div class="care-sum" id="careSum"></div><div class="cons" id="cons"></div></section>
+      <section data-sec="cams"><div class="cams" id="cams"></div><p class="note">Bild antippen für die Live-Ansicht.</p></section>
       <section data-sec="rooms">
         <p class="note" id="rnNote"></p>
         <div class="rnhelp" id="rnHelp" hidden></div>
@@ -559,6 +577,9 @@ class VakuumCard extends HTMLElement {
     this.$("rbStation").addEventListener("click", () => this._openSheet("station"));
     this.$("rbCare").addEventListener("click", () => this._openSheet("care"));
     this.$("rbRooms").addEventListener("click", () => this._openSheet("rooms"));
+    // Eine Kamera → direkt Live-Ansicht; mehrere → Übersicht mit Standbildern
+    this.$("rbCam").addEventListener("click", () => this._cams.length === 1 ? this._moreInfo(this._cams[0].entity) : this._openSheet("cams"));
+    this.$("cams").addEventListener("click", e => { const b = e.target.closest("[data-cam]"); if (b) this._moreInfo(b.dataset.cam); });
     const rl = this.$("rnList");
     rl.addEventListener("input", e => { const i = e.target.closest("input"); if (!i) return; this._drafts[i.dataset.id] = i.value; this._updateRoomButtons(); this._drawFx(); });
     rl.addEventListener("focusin", e => { const i = e.target.closest("input"); if (i) this._focusRoom(i.dataset.id, true); });
@@ -721,11 +742,13 @@ class VakuumCard extends HTMLElement {
     this.$("rbGoto").hidden = !c.topic;
     this.$("rbStation").hidden = !E.dock && !E.tanks.length && !E.empty;
     this.$("rbCare").hidden = !E.consumables.length;
+    this.$("rbCam").hidden = !this._cams.length;
 
     this._renderClean(); this._renderStation(); this._renderCare(); this._renderActivity(); this._updateDock();
     if (wasCleaning !== this._cleaning) this._drawFx();
   }
   _tick(){
+    if (this._sheet === "cams") this._renderCams();
     this._pollN++;
     const busy = this._cleaning || ["returning", "paused"].includes(this._st.status) || this._dockAct;
     if (busy || this._pollN % 8 === 0) this._fetchMap();
@@ -879,14 +902,15 @@ class VakuumCard extends HTMLElement {
   /* ---------- Sheets ---------- */
   _openSheet(name){ if (this._sheet === name) { this._closeSheet(); return; } this._showSheet(name); }
   _showSheet(name){
-    this._sheet = name; this.$("shTitle").textContent = { clean: "Reinigung", station: "Station", care: "Pflege", rooms: "Räume benennen" }[name];
+    this._sheet = name; this.$("shTitle").textContent = { clean: "Reinigung", station: "Station", care: "Pflege", rooms: "Räume benennen", cams: "Kameras" }[name];
     if (name !== "rooms") { this._editSeg = null; this._drafts = {}; } else this._renderRooms();
     this._stage.classList.toggle("editing", name === "rooms");
     this.shadowRoot.querySelectorAll("#shTabs button").forEach(b => { b.setAttribute("aria-pressed", b.dataset.sec === name);
-      b.hidden = (b.dataset.sec === "station" && this.$("rbStation").hidden) || (b.dataset.sec === "care" && this.$("rbCare").hidden); });
+      b.hidden = (b.dataset.sec === "station" && this.$("rbStation").hidden) || (b.dataset.sec === "care" && this.$("rbCare").hidden) || (b.dataset.sec === "cams" && !this._cams.length); });
+    if (name === "cams") this._renderCams(true);
     this.shadowRoot.querySelectorAll(".sh-body section").forEach(s => s.hidden = s.dataset.sec !== name);
     this.$("sheet").classList.add("open"); this._stage.classList.add("drawer");
-    ["rbStation", "rbCare", "rbRooms"].forEach(id => this.$(id).setAttribute("aria-pressed", id === { station: "rbStation", care: "rbCare", rooms: "rbRooms" }[name]));
+    ["rbStation", "rbCare", "rbRooms", "rbCam"].forEach(id => this.$(id).setAttribute("aria-pressed", id === { station: "rbStation", care: "rbCare", rooms: "rbRooms", cams: "rbCam" }[name]));
     this._drawFx();
     if (name === "station") this._dvRun();
     setTimeout(() => this._redraw(), 30); setTimeout(() => this._redraw(), 420);
@@ -894,9 +918,23 @@ class VakuumCard extends HTMLElement {
   _closeSheet(){
     if (!this._sheet) return; this._sheet = null; this._editSeg = null; this._drafts = {};
     this.$("sheet").classList.remove("open"); this._stage.classList.remove("drawer", "editing");
-    ["rbStation", "rbCare", "rbRooms"].forEach(id => this.$(id).setAttribute("aria-pressed", "false"));
+    ["rbStation", "rbCare", "rbRooms", "rbCam"].forEach(id => this.$(id).setAttribute("aria-pressed", "false"));
     this.shadowRoot.activeElement?.blur?.(); this._drawFx();
     setTimeout(() => this._redraw(), 30); setTimeout(() => this._redraw(), 420);
+  }
+
+  /* ---------- Kameras ---------- */
+  _moreInfo(entityId){ this.dispatchEvent(new CustomEvent("hass-more-info", { detail: { entityId }, bubbles: true, composed: true })); }
+  _renderCams(full){
+    const box = this.$("cams"), h = this._hass; if (!h) return;
+    if (full || box.children.length !== this._cams.length) box.innerHTML = this._cams.map(c => `<button class="cam" data-cam="${vkEsc(c.entity)}"><span class="ph">Kein Bild</span><img alt="" hidden><span class="cn"><i></i><span></span></span></button>`).join("");
+    this._cams.forEach((c, i) => { const st = h.states[c.entity], el = box.children[i], img = el.querySelector("img");
+      const off = !st || ["unavailable", "unknown", "off"].includes(st.state);
+      el.classList.toggle("off", off); el.querySelector(".cn span").textContent = c.name || st?.attributes.friendly_name || c.entity;
+      const pic = st?.attributes.entity_picture;
+      if (pic && !off) { const u = (h.hassUrl ? h.hassUrl(pic) : pic) + (pic.includes("?") ? "&" : "?") + "t=" + Date.now();
+        const pre = new Image(); pre.onload = () => { img.src = pre.src; img.hidden = false; }; pre.src = u; }
+      else img.hidden = true; });
   }
 
   /* ---------- Räume benennen (Valetudo MapSegmentRenameCapability über einen HA-Dienst) ---------- */
@@ -988,6 +1026,9 @@ class VakuumCard extends HTMLElement {
     const xs = r.width < 380 ? "1" : "0"; if (S.dataset.xs !== xs) S.dataset.xs = xs;
     const tb = this.$("top").getBoundingClientRect().bottom - r.top;
     if (nl === "phone") { S.style.setProperty("--rail-top", (tb + 8) + "px"); S.style.setProperty("--toast-top", (tb + 62) + "px"); }
+    else if (nl === "wide") { const rl = this.$("rail"), t = tb + 10, b = this.$("dock").getBoundingClientRect().top - r.top - 10;
+      S.classList.remove("railc"); let h = rl.offsetHeight; if (h > b - t) { S.classList.add("railc"); h = rl.offsetHeight; }
+      S.style.setProperty("--rail-y", Math.max(t, t + (b - t - h) / 2) + "px"); }
     else if (nl === "short") { S.style.setProperty("--rail-w", this.$("rail").offsetWidth + "px"); S.style.setProperty("--toast-top", (this.$("top").getBoundingClientRect().bottom - r.top + 10) + "px"); }
   }
   _clampZoom(){
