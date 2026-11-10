@@ -1,4 +1,4 @@
-# Vakuum-Karte
+# Vakuum-Card
 
 A Lovelace card for Valetudo robot vacuums (built for the Eureka J15 Pro Ultra): live map with 2D/3D view, room and zone cleaning, go-to, a water trail for mopped areas, station animations, consumables and a room-name editor. Optimized for desktop, kiosk and phone. Fully local.
 
