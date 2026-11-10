@@ -19,7 +19,7 @@
    - Renaming rooms: a Home Assistant service (rest_command, see the package).
    ========================================================================== */
 
-const VK_VERSION = "2.2.0";
+const VK_VERSION = "2.2.1";
 
 /* ---------- Icons (custom line icons) ---------- */
 const VK_ICONS = {
@@ -300,6 +300,8 @@ canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block
 .tank .v { margin-top: 7px; font-weight: 500; display: flex; align-items: center; gap: 7px; }
 .tank .v::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--good); }
 .tank.warn .v::before { background: var(--warn); } .tank.bad .v::before { background: var(--bad); }
+.tile.off { opacity: .55; }
+.tile.off .ti { filter: grayscale(1); }
 .tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; }
 .cams { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
 .cam { appearance: none; position: relative; display: block; padding: 0; border: 1px solid var(--stroke2); border-radius: 15px; overflow: hidden; background: var(--stroke); color: #fff; cursor: pointer; aspect-ratio: 16 / 10; text-align: left; }
@@ -948,12 +950,15 @@ class VakuumCard extends HTMLElement {
           this._toast(act === "stop" ? label + " stopped" : label + " started", "ok"); vkBuzz(10); })
         .catch(e => this._toast(label + " failed: " + (e.message || e), "err")); };
     const wash = this._config.mop_wash_service || "rest_command.vacuum_mop_wash", dry = this._config.mop_dry_service || "rest_command.vacuum_mop_dry";
-    if (svcOk(wash)) tiles.push({ kind: "wash", icon: "care", name: "Wash mops", sub: "Clean the mop pads now", run: () => dockCmd(wash, "wash", "Mop wash") });
-    if (svcOk(dry)) tiles.push({ kind: "dry", icon: "wind", name: "Dry mops", sub: "Start hot-air drying", run: () => dockCmd(dry, "dry", "Mop drying") });
+    // Always shown (unless mop_buttons: false), so a missing setup is visible instead of silently hiding the tiles
+    const setup = n => () => this._toast(`${n} not found: add it from vacuum.yaml (rest_command), set ROBOT_IP, restart HA`, "err");
+    if (this._config.mop_buttons !== false) {
+      tiles.push({ kind: "wash", icon: "care", name: "Wash mops", sub: svcOk(wash) ? "Clean the mop pads now" : "Setup needed · tap for info", off: !svcOk(wash), run: svcOk(wash) ? () => dockCmd(wash, "wash", "Mop wash") : setup(wash) });
+      tiles.push({ kind: "dry", icon: "wind", name: "Dry mops", sub: svcOk(dry) ? "Start hot-air drying" : "Setup needed · tap for info", off: !svcOk(dry), run: svcOk(dry) ? () => dockCmd(dry, "dry", "Mop drying") : setup(dry) }); }
     tiles.push({ icon: "home", name: "Back to dock", sub: "Charge & care", run: () => this._svc("vacuum", "return_to_base", {}, "Returning to dock") });
     const box = this.$("tiles"); box.innerHTML = "";
     for (const t of tiles) { const run = t.kind && this._dockAct?.kind === t.kind, b = document.createElement("button");
-      b.className = "tile" + (run ? " run" : ""); b.innerHTML = `<span class="ti">${vkIc(t.icon)}</span><span><b>${t.name}</b><small>${run ? (t.kind === "empty" ? "Running…" : "Running… · tap to stop") : t.sub}</small></span>`;
+      b.className = "tile" + (run ? " run" : "") + (t.off ? " off" : ""); b.innerHTML = `<span class="ti">${vkIc(t.icon)}</span><span><b>${t.name}</b><small>${run ? (t.kind === "empty" ? "Running…" : "Running… · tap to stop") : t.sub}</small></span>`;
       b.addEventListener("click", t.run); box.appendChild(b); }
   }
   _renderCare(){
